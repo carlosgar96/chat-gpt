@@ -199,7 +199,7 @@ async function makeZip(items){const chunks=[],central=[];let offset=0;for(const 
  const end=new Uint8Array([80,75,5,6,...u16(0),...u16(0),...u16(items.length),...u16(items.length),...u32(offset-startCentral),...u32(startCentral),...u16(0)]);
  return new Blob([...chunks,...central,end],{type:'application/zip'})}
 async function exportVideo(mode){if(state.exporting||!state.scenes.length){if(!state.scenes.length)toast('Primero importa imágenes.');return}
- stopPreview();state.exporting=true;state.cancel=false;ui.download.hidden=true;$('exportAll').disabled=true;$('exportClips').disabled=true;await requestWake();
+ stopPreview();if(mode==='all'&&state.audioUrl&&audioDuration())syncScenesToAudio(false);state.exporting=true;state.cancel=false;ui.download.hidden=true;$('exportAll').disabled=true;$('exportClips').disabled=true;await requestWake();
  try{
   if(mode==='all'){
    setProgress(0,'Exportando video completo…','Grabando en tiempo real. No cambies de aplicación.');
