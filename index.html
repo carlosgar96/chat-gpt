@@ -409,13 +409,24 @@ async function exportVideo(mode){if(state.exporting||!state.scenes.length){if(!s
    const {blob,extension}=await recordSequence(state.scenes,{includeAudio:!!state.audioUrl,withTransitions:true,onProgress:p=>setProgress(100*p,'Exportando video completo…',`${secFmt(totalDuration()*p)} de ${secFmt(totalDuration())} · Mantén esta pantalla abierta.`)});
    addDownload(blob,`AutoEditor_${state.ratio.replace(':','x')}.${extension}`);
   }else{
-   const files=[];const n=state.scenes.length;for(let i=0;i<n;i++){
+   const files=[];const n=state.scenes.length,usedNames=new Map(),manifest=['ORDEN DE LA LÍNEA DE TIEMPO','Nº | INICIO | DURACIÓN | ARCHIVO | ORIGINAL'];
+   let clipStart=0;
+   for(let i=0;i<n;i++){
     if(state.cancel)throw new Error('Exportación cancelada.');
-    setProgress(100*i/n,`Exportando escena ${i+1} de ${n}…`,'Los clips individuales conservan sus tiempos, sin narración ni transiciones.');
-    const {blob,extension}=await recordSequence([{...state.scenes[i],motionIndex:i}],{includeAudio:false,onProgress:p=>setProgress((i+p)*100/n,`Exportando escena ${i+1} de ${n}…`,'Se unirán en un único ZIP ordenado.')});
-    const before=state.scenes.slice(0,i).reduce((a,s)=>a+s.duration,0);const minutes=Math.floor(before/60),seconds=Math.floor(before%60);
-    files.push({blob,name:`${minutes}-${String(seconds).padStart(2,'0')}.${extension}`});
+    const scene=state.scenes[i],start=clipStart;clipStart+=scene.duration;
+    setProgress(100*i/n,'Exportando clip '+(i+1)+' de '+n+'…','Conservando movimiento, encuadre y fragmento de voz del audio.');
+    const {blob,extension}=await recordSequence([{...scene,motionIndex:i}],{
+      includeAudio:!!state.audioUrl,audioOffset:start,withTransitions:false,
+      onProgress:p=>setProgress((i+p)*100/n,'Exportando clip '+(i+1)+' de '+n+'…','Recortando audio desde '+detailedTime(start)+'.')
+    });
+    const raw=String(scene.name||'clip_'+String(i+1).padStart(2,'0')).replace(/\.[^.]+$/,'');
+    const safe=(raw.replace(/[\\/:*?"<>|]/g,'_').replace(/^\.+$/,'clip').trim().slice(0,90)||('clip_'+String(i+1).padStart(2,'0')));
+    const key=safe.toLocaleLowerCase('es');const occur=(usedNames.get(key)||0)+1;usedNames.set(key,occur);
+    const filename=safe+(occur>1?'_'+String(occur).padStart(2,'0'):'')+'.'+extension;
+    files.push({blob,name:filename});
+    manifest.push((i+1)+' | '+detailedTime(start)+' | '+scene.duration.toFixed(3)+' s | '+filename+' | '+scene.name);
    }
+   files.push({name:'ORDEN_LINEA_DE_TIEMPO.txt',blob:new Blob([manifest.join('\n')],{type:'text/plain;charset=utf-8'})});
    setProgress(100,'Empaquetando ZIP…','Preparando clips individuales.');
    const zip=await makeZip(files);addDownload(zip,'AutoEditor_clips.zip');
   }
