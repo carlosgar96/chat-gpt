@@ -213,7 +213,7 @@ function makeBlurred(scene){if(scene.blurred)return scene.blurred;
  c.filter='blur(14px)';c.drawImage(img,(buffer.width-img.naturalWidth*scale)/2,(buffer.height-img.naturalHeight*scale)/2,img.naturalWidth*scale,img.naturalHeight*scale);
  scene.blurred=buffer;return buffer}
 function compose(frame){const w=ui.canvas.width,h=ui.canvas.height;ctx.fillStyle='#10101c';ctx.fillRect(0,0,w,h);if(!frame)return;
- const {scene,index,p}=frame;const img=scene.img;if(!img||!img.naturalWidth)return;
+ const {scene,index,p}=frame;const motionIndex=Number.isInteger(scene.motionIndex)?scene.motionIndex:index;const img=scene.img;if(!img||!img.naturalWidth)return;
  let area={x:0,y:0,w,h};let fit=state.fit;
  if(state.imageRatio!=='auto'){
    const [a,b]=ratioNums[state.imageRatio];const ratio=a/b; if(w/h>ratio){area.w=h*ratio;area.x=(w-area.w)/2}else{area.h=w/ratio;area.y=(h-area.h)/2}
@@ -228,30 +228,33 @@ function compose(frame){const w=ui.canvas.width,h=ui.canvas.height;ctx.fillStyle
   const intensity=clamp(state.motionIntensity,20,100)/100;
   const travel=state.motion==='still'?0:spareX*(.22+.4*intensity);
   const startX=area.x+(spareX-travel)/2;
-  const x0=index%2===0?startX:startX+travel;
-  const moved=x0+(index%2===0?1:-1)*travel*clamp(p,0,1);
+  const x0=motionIndex%2===0?startX:startX+travel;
+  const moved=x0+(motionIndex%2===0?1:-1)*travel*clamp(p,0,1);
   const y0=area.y+(area.h-ih)/2;
   ctx.drawImage(img,moved,y0,iw,ih);
- }else{renderImage(img,area,p,index,state.motion)}
+ }else{renderImage(img,area,p,motionIndex,state.motion)}
 }
 function drawTimelineAt(t,scenes=state.scenes,withTransitions=true){
- const frame=frameAt(t,scenes);compose(frame);
- if(!frame||!withTransitions||state.transitionType==='none'||scenes.length<2)return;
- let cumulative=0;
- for(let i=0;i<frame.index+1;i++)cumulative+=scenes[i].duration;
- if(frame.index>=scenes.length-1)return;
- const fade=Math.min(state.transitionDuration,scenes[frame.index].duration*.5,scenes[frame.index+1].duration*.5);
- if(!fade||t<cumulative-fade)return;
- const mix=clamp((t-(cumulative-fade))/fade,0,1);
+ const frame=frameAt(t,scenes);
+ if(!frame)return compose(null);
+ if(!withTransitions||state.transitionType==='none'||scenes.length<2||frame.index===0){compose(frame);return;}
+ let boundary=0;for(let i=0;i<frame.index;i++)boundary+=scenes[i].duration;
+ const current=frame.index;
+ const fade=Math.min(state.transitionDuration,scenes[current-1].duration*.5,scenes[current].duration*.5);
+ // Transitions start at the exact timestamp, never before it.
+ if(!fade||t>boundary+fade){compose(frame);return}
+ const mix=clamp((t-boundary)/fade,0,1);
+ const prev={scene:scenes[current-1],index:current-1,p:1};
  const baseCtx=ctx;
  if(state.transitionType==='black'){
-  if(mix>.5){const buf=ensureTransitionCanvas();const nextCtx=buf.getContext('2d',{alpha:false});try{ctx=nextCtx;compose({scene:scenes[frame.index+1],index:frame.index+1,p:0})}finally{ctx=baseCtx}baseCtx.drawImage(buf,0,0)}
-  baseCtx.save();baseCtx.fillStyle='#000';baseCtx.globalAlpha=mix<=.5?mix*2:(1-mix)*2;
+  compose(mix<.5?prev:frame);
+  baseCtx.save();baseCtx.fillStyle='#000';baseCtx.globalAlpha=mix<.5?mix*2:(1-mix)*2;
   baseCtx.fillRect(0,0,ui.canvas.width,ui.canvas.height);baseCtx.restore();return;
  }
- const buf=ensureTransitionCanvas();const nextCtx=buf.getContext('2d',{alpha:false});
- try{ctx=nextCtx;compose({scene:scenes[frame.index+1],index:frame.index+1,p:0})}finally{ctx=baseCtx}
- baseCtx.save();baseCtx.globalAlpha=mix;baseCtx.drawImage(buf,0,0);baseCtx.restore();
+ const buffer=ensureTransitionCanvas(),nextCtx=buffer.getContext('2d',{alpha:false});
+ try{ctx=nextCtx;compose(frame)}finally{ctx=baseCtx}
+ compose(prev);
+ baseCtx.save();baseCtx.globalAlpha=mix;baseCtx.drawImage(buffer,0,0);baseCtx.restore();
 }
 function drawPreviewAt(time){const all=totalDuration();if(!state.scenes.length){ctx.fillStyle='#15172a';ctx.fillRect(0,0,ui.canvas.width,ui.canvas.height);ui.current.textContent='00:00';ui.seek.value='0';return}
  const t=clamp(time,0,Math.max(0,all-.001));drawTimelineAt(t,state.scenes,true);ui.current.textContent=secFmt(t);ui.seek.value=all?String(Math.round(t/all*10000)/100):'0';}
@@ -290,8 +293,8 @@ async function recordSequence(scenes,{includeAudio=false,withTransitions=false,o
  let result;
  try{
   recorder.start(1000);
-  const startAt=performance.now();
   if(includeAudio&&state.audioUrl){ui.audio.currentTime=0;await ui.audio.play();audioStarted=true}
+  const startAt=performance.now();
   const tick=(now)=>{
    if(finished)return;
    const elapsed=clamp((now-startAt)/1000,0,total);
@@ -332,7 +335,7 @@ async function exportVideo(mode){if(state.exporting||!state.scenes.length){if(!s
    const files=[];const n=state.scenes.length;for(let i=0;i<n;i++){
     if(state.cancel)throw new Error('Exportación cancelada.');
     setProgress(100*i/n,`Exportando escena ${i+1} de ${n}…`,'Los clips individuales conservan sus tiempos, sin narración ni transiciones.');
-    const {blob,extension}=await recordSequence([state.scenes[i]],{includeAudio:false,onProgress:p=>setProgress((i+p)*100/n,`Exportando escena ${i+1} de ${n}…`,'Se unirán en un único ZIP ordenado.')});
+    const {blob,extension}=await recordSequence([{...state.scenes[i],motionIndex:i}],{includeAudio:false,onProgress:p=>setProgress((i+p)*100/n,`Exportando escena ${i+1} de ${n}…`,'Se unirán en un único ZIP ordenado.')});
     const before=state.scenes.slice(0,i).reduce((a,s)=>a+s.duration,0);const minutes=Math.floor(before/60),seconds=Math.floor(before%60);
     files.push({blob,name:`${minutes}-${String(seconds).padStart(2,'0')}.${extension}`});
    }
