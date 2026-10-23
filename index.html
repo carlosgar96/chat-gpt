@@ -403,8 +403,21 @@ async function recordSequence(scenes,{includeAudio=false,withTransitions=false,a
  const done=new Promise((resolve,reject)=>{recorder.addEventListener('dataavailable',e=>{if(e.data&&e.data.size)chunks.push(e.data)});recorder.addEventListener('stop',()=>resolve(),{once:true});recorder.addEventListener('error',e=>reject(e.error||new Error('Falló la grabación.')),{once:true})});
  let result;
  try{
-  recorder.start(1000);
-  if(includeAudio&&state.audioUrl){ui.audio.currentTime=Math.max(0,audioOffset);await ui.audio.play();audioStarted=true}
+  if(includeAudio&&state.audioUrl){
+   // Seek and wait BEFORE starting the MP4 recorder, as in Android -ss.
+   const target=Math.max(0,audioOffset);
+   if(Math.abs(ui.audio.currentTime-target)>.025){
+     await new Promise(resolve=>{
+       let complete=false;
+       const finish=()=>{if(complete)return;complete=true;ui.audio.removeEventListener('seeked',finish);clearTimeout(limit);resolve()};
+       const limit=setTimeout(finish,2500);
+       ui.audio.addEventListener('seeked',finish,{once:true});
+       try{ui.audio.currentTime=target}catch{finish()}
+     });
+   }
+ }
+ recorder.start(1000);
+ if(includeAudio&&state.audioUrl){await ui.audio.play();audioStarted=true}
   const startAt=performance.now();
   const tick=(now)=>{
    if(finished)return;
@@ -494,7 +507,7 @@ function bind(){previewDimensions();drawPreviewAt(0);sync();
  $('transitionDuration').onchange=e=>{state.transitionDuration=Number(e.target.value)};
  $('duration').oninput=e=>{state.duration=Number(e.target.value);$('durationValue').textContent=state.duration.toFixed(1)+' s';for(const s of state.scenes)s.duration=state.duration;state.syncMode='manual';stopPreview();state.pausedAt=0;sync()};
  $('quality').onchange=e=>{state.quality=Number(e.target.value)};
- ui.play.onclick=playPreview;ui.seek.oninput=e=>{stopPreview();state.pausedAt=totalDuration()*Number(e.target.value)/100;if(state.audioUrl){try{ui.audio.currentTime=state.pausedAt}catch{}}drawPreviewAt(state.pausedAt)};ui.audio.addEventListener('seeked',()=>{if(!state.previewing&&state.audioUrl){state.pausedAt=clamp(ui.audio.currentTime,0,totalDuration());drawPreviewAt(state.pausedAt)}});
+ ui.play.onclick=playPreview;ui.seek.oninput=e=>{stopPreview();state.pausedAt=totalDuration()*Number(e.target.value)/100;if(state.audioUrl){try{ui.audio.currentTime=state.pausedAt}catch{}}drawPreviewAt(state.pausedAt)};ui.audio.addEventListener('seeked',()=>{if(!state.previewing&&!state.exporting&&state.audioUrl){state.pausedAt=clamp(ui.audio.currentTime,0,totalDuration());drawPreviewAt(state.pausedAt)}});
  $('audioInput').onchange=e=>{const file=e.target.files?.[0];if(!file)return;stopPreview();if(state.audioUrl)URL.revokeObjectURL(state.audioUrl);state.audioUrl=objectURL(file);ui.audio.onloadedmetadata=()=>{if(state.scenes.length&&state.syncMode==='equal'){syncScenesToAudio(false);toast('Modo simple: imágenes distribuidas por igual.')}else toast('Audio cargado: usa Sincronizar 6.1 o marca cortes escuchando la voz.');updateSyncUI();updateAudioPosition()};ui.audio.src=state.audioUrl;ui.audio.load();ui.audioName.textContent=file.name;ui.audioButtons.hidden=false;e.target.value='';updateSyncUI();toast('Audio añadido. La sincronización se hará automáticamente.');};
  $('removeAudio').onclick=()=>{stopPreview();if(state.audioUrl)URL.revokeObjectURL(state.audioUrl);state.audioUrl=null;ui.audio.removeAttribute('src');ui.audio.load();ui.audioName.textContent='Añadir audio';ui.audioButtons.hidden=true;updateSyncUI()};
  $('matchAudio').onclick=()=>{stopPreview();syncScenesToAudio(true)};
