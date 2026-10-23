@@ -95,8 +95,11 @@ const state = {scenes:[],ratio:'9:16',imageRatio:'auto',fit:'blur',syncMode:'exa
    playStarted:0,pausedAt:0,previewing:false,playingFrame:0,exporting:false,cancel:false,activeRecorder:null,
    audioUrl:null,audioCtx:null,audioSource:null,audioDestination:null,wakeLock:null,lastDownloadUrl:null,audioSync:true};
 const ratioNums={'9:16':[9,16],'16:9':[16,9],'1:1':[1,1],'4:5':[4,5]};
-const ctx=ui.canvas.getContext('2d',{alpha:false,willReadFrequently:false});
+let ctx=ui.canvas.getContext('2d',{alpha:false,willReadFrequently:false});
 let toastTimer=null;
+let transitionCanvas=null;
+function ensureTransitionCanvas(){if(!transitionCanvas)transitionCanvas=document.createElement('canvas');if(transitionCanvas.width!==ui.canvas.width||transitionCanvas.height!==ui.canvas.height){transitionCanvas.width=ui.canvas.width;transitionCanvas.height=ui.canvas.height}return transitionCanvas}
+
 function toast(msg){ui.toast.textContent=msg;ui.toast.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>ui.toast.classList.remove('visible'),4200)}
 function secFmt(s){s=Math.max(0,Math.floor(s||0));return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`}
 
@@ -215,15 +218,42 @@ function compose(frame){const w=ui.canvas.width,h=ui.canvas.height;ctx.fillStyle
  if(state.imageRatio!=='auto'){
    const [a,b]=ratioNums[state.imageRatio];const ratio=a/b; if(w/h>ratio){area.w=h*ratio;area.x=(w-area.w)/2}else{area.h=w/ratio;area.y=(h-area.h)/2}
  }
- if(fit==='blur'||area.w!==w||area.h!==h){const bg=makeBlurred(scene);ctx.save();ctx.globalAlpha=.8;ctx.drawImage(bg,0,0,w,h);ctx.restore()}
- if(fit==='blur'){
-  const ar=img.naturalWidth/img.naturalHeight;const container=area.w/area.h;
-  let box={...area};if(ar>container){box.h=area.w/ar;box.y=area.y+(area.h-box.h)/2}else{box.w=area.h*ar;box.x=area.x+(area.w-box.w)/2}
-  renderImage(img,box,p,index,state.motion);
+ if(fit==='blur'){const bg=makeBlurred(scene);ctx.save();ctx.globalAlpha=.84;ctx.drawImage(bg,0,0,w,h);ctx.restore()}
+ if(fit==='blur'||fit==='contain'){
+  // Keep all photo pixels visible: no cover crop, no animated enlargement.
+  const ir=img.naturalWidth/img.naturalHeight,vr=area.w/area.h;
+  const scale=.955*(ir>vr?area.w/img.naturalWidth:area.h/img.naturalHeight);
+  const iw=img.naturalWidth*scale,ih=img.naturalHeight*scale;
+  const spareX=Math.max(0,area.w-iw);
+  const intensity=clamp(state.motionIntensity,20,100)/100;
+  const travel=state.motion==='still'?0:spareX*(.22+.4*intensity);
+  const startX=area.x+(spareX-travel)/2;
+  const x0=index%2===0?startX:startX+travel;
+  const moved=x0+(index%2===0?1:-1)*travel*clamp(p,0,1);
+  const y0=area.y+(area.h-ih)/2;
+  ctx.drawImage(img,moved,y0,iw,ih);
  }else{renderImage(img,area,p,index,state.motion)}
 }
+function drawTimelineAt(t,scenes=state.scenes,withTransitions=true){
+ const frame=frameAt(t,scenes);compose(frame);
+ if(!frame||!withTransitions||state.transitionType==='none'||scenes.length<2)return;
+ let cumulative=0;
+ for(let i=0;i<frame.index+1;i++)cumulative+=scenes[i].duration;
+ if(frame.index>=scenes.length-1)return;
+ const fade=Math.min(state.transitionDuration,scenes[frame.index].duration*.5,scenes[frame.index+1].duration*.5);
+ if(!fade||t<cumulative-fade)return;
+ const mix=clamp((t-(cumulative-fade))/fade,0,1);
+ const baseCtx=ctx;
+ if(state.transitionType==='black'){
+  baseCtx.save();baseCtx.fillStyle='#000';baseCtx.globalAlpha=mix; // fade out before next scene
+  baseCtx.fillRect(0,0,ui.canvas.width,ui.canvas.height);baseCtx.restore();return;
+ }
+ const buf=ensureTransitionCanvas();const nextCtx=buf.getContext('2d',{alpha:false});
+ try{ctx=nextCtx;compose({scene:scenes[frame.index+1],index:frame.index+1,p:0})}finally{ctx=baseCtx}
+ baseCtx.save();baseCtx.globalAlpha=mix;baseCtx.drawImage(buf,0,0);baseCtx.restore();
+}
 function drawPreviewAt(time){const all=totalDuration();if(!state.scenes.length){ctx.fillStyle='#15172a';ctx.fillRect(0,0,ui.canvas.width,ui.canvas.height);ui.current.textContent='00:00';ui.seek.value='0';return}
- const t=clamp(time,0,Math.max(0,all-.001));compose(frameAt(t));ui.current.textContent=secFmt(t);ui.seek.value=all?String(Math.round(t/all*10000)/100):'0';}
+ const t=clamp(time,0,Math.max(0,all-.001));drawTimelineAt(t,state.scenes,true);ui.current.textContent=secFmt(t);ui.seek.value=all?String(Math.round(t/all*10000)/100):'0';}
 function stopPreview(){state.previewing=false;cancelAnimationFrame(state.playingFrame);ui.play.textContent='▶';ui.play.setAttribute('aria-label','Reproducir vista previa');ui.audio.pause()}
 function playPreview(){if(!state.scenes.length||state.exporting)return;
  if(state.previewing){const elapsed=(performance.now()-state.playStarted)/1000;state.pausedAt=Math.min(totalDuration(),state.pausedAt+elapsed);stopPreview();return}
@@ -244,9 +274,9 @@ async function setupAudio(){if(!state.audioUrl)return null;
  await state.audioCtx.resume();return state.audioDestination.stream.getAudioTracks()[0]}
 async function requestWake(){try{if('wakeLock' in navigator)state.wakeLock=await navigator.wakeLock.request('screen')}catch{}}
 async function releaseWake(){try{if(state.wakeLock)await state.wakeLock.release()}catch{}state.wakeLock=null}
-async function recordSequence(scenes,{includeAudio=false,onProgress=()=>{}}={}){
+async function recordSequence(scenes,{includeAudio=false,withTransitions=false,onProgress=()=>{}}={}){
  const total=scenes.reduce((x,s)=>x+s.duration,0);if(!total)throw new Error('La secuencia está vacía.');
- const [w,h]=dimensions(state.ratio,state.quality);ui.canvas.width=w;ui.canvas.height=h;compose({scene:scenes[0],index:0,p:0});
+ const [w,h]=dimensions(state.ratio,state.quality);ui.canvas.width=w;ui.canvas.height=h;drawTimelineAt(0,scenes,withTransitions);
  if(typeof ui.canvas.captureStream!=='function'||typeof MediaRecorder==='undefined')throw new Error('Safari no ofrece la función de grabación de video requerida.');
  const stream=ui.canvas.captureStream(30);
  if(!stream.getVideoTracks().length)throw new Error('No se logró crear la pista de video.');
@@ -264,7 +294,7 @@ async function recordSequence(scenes,{includeAudio=false,onProgress=()=>{}}={}){
   const tick=(now)=>{
    if(finished)return;
    const elapsed=clamp((now-startAt)/1000,0,total);
-   compose(frameAt(elapsed,scenes));onProgress(elapsed/total);
+   drawTimelineAt(elapsed,scenes,withTransitions);onProgress(elapsed/total);
    if(state.cancel||elapsed>=total){finished=true;if(recorder.state!=='inactive')recorder.stop();return}
    animId=requestAnimationFrame(tick)
   };
@@ -295,12 +325,12 @@ async function exportVideo(mode){if(state.exporting||!state.scenes.length){if(!s
  try{
   if(mode==='all'){
    setProgress(0,'Exportando video completo…','Grabando en tiempo real. No cambies de aplicación.');
-   const {blob,extension}=await recordSequence(state.scenes,{includeAudio:!!state.audioUrl,onProgress:p=>setProgress(100*p,'Exportando video completo…',`${secFmt(totalDuration()*p)} de ${secFmt(totalDuration())} · Mantén esta pantalla abierta.`)});
+   const {blob,extension}=await recordSequence(state.scenes,{includeAudio:!!state.audioUrl,withTransitions:true,onProgress:p=>setProgress(100*p,'Exportando video completo…',`${secFmt(totalDuration()*p)} de ${secFmt(totalDuration())} · Mantén esta pantalla abierta.`)});
    addDownload(blob,`AutoEditor_${state.ratio.replace(':','x')}.${extension}`);
   }else{
    const files=[];const n=state.scenes.length;for(let i=0;i<n;i++){
     if(state.cancel)throw new Error('Exportación cancelada.');
-    setProgress(100*i/n,`Exportando escena ${i+1} de ${n}…`,'Los clips individuales no llevan narración ni transiciones.');
+    setProgress(100*i/n,`Exportando escena ${i+1} de ${n}…`,'Los clips individuales conservan sus tiempos, sin narración ni transiciones.');
     const {blob,extension}=await recordSequence([state.scenes[i]],{includeAudio:false,onProgress:p=>setProgress((i+p)*100/n,`Exportando escena ${i+1} de ${n}…`,'Se unirán en un único ZIP ordenado.')});
     const before=state.scenes.slice(0,i).reduce((a,s)=>a+s.duration,0);const minutes=Math.floor(before/60),seconds=Math.floor(before%60);
     files.push({blob,name:`${minutes}-${String(seconds).padStart(2,'0')}.${extension}`});
