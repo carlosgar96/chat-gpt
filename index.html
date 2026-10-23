@@ -99,6 +99,33 @@ const ctx=ui.canvas.getContext('2d',{alpha:false,willReadFrequently:false});
 let toastTimer=null;
 function toast(msg){ui.toast.textContent=msg;ui.toast.classList.add('visible');clearTimeout(toastTimer);toastTimer=setTimeout(()=>ui.toast.classList.remove('visible'),4200)}
 function secFmt(s){s=Math.max(0,Math.floor(s||0));return `${String(Math.floor(s/60)).padStart(2,'0')}:${String(s%60).padStart(2,'0')}`}
+
+function detailedTime(s){s=Math.max(0,s||0);const mm=Math.floor(s/60),sec=s-mm*60;return String(mm).padStart(2,'0')+':'+(sec<10?'0':'')+sec.toFixed(2)}
+function timeSeconds(s){const x=String(s).trim().replace(',','.');const m=x.match(/^(?:(\d+):)?(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?$/);if(m)return (+m[1]||0)*3600+(+m[2])*60+(+m[3])+(m[4]?Number('0.'+m[4]):0);const n=Number(x);return x!==''&&Number.isFinite(n)&&n>=0?n:NaN}
+function parseTimecodes(text,lastEnd){
+ const ranges=[];
+ for(const line of text.split(/\r?\n/)){
+  const m=line.trim().match(/^\(?(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,3})?)\)?\s*(?:-|–|—|→|a)\s*\(?(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,3})?)\)?/i);
+  if(m)ranges.push([timeSeconds(m[1]),timeSeconds(m[2])]);
+ }
+ if(ranges.length)return ranges;
+ let marks=Array.from(text.matchAll(/\((\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,3})?)\)/g),m=>timeSeconds(m[1]));
+ if(!marks.length)marks=text.split(/\r?\n/).map(x=>x.trim().match(/^(\d{1,2}:\d{2}(?::\d{2})?(?:[.,]\d{1,3})?)(?=\s|$)/)).filter(Boolean).map(m=>timeSeconds(m[1]));
+ return marks.map((start,i)=>[start,i+1<marks.length?marks[i+1]:lastEnd]);
+}
+function applyExactTimes(){
+ if(!state.scenes.length){toast('Primero importa imágenes.');return false}
+ const ranges=parseTimecodes($('timecodes').value,audioDuration());
+ if(ranges.length!==state.scenes.length){$('timingHint').textContent='Se detectaron '+ranges.length+' tramos para '+state.scenes.length+' imágenes. Deben coincidir: no se repartirán tiempos inventados.';toast('Número de tiempos e imágenes diferente.');return false}
+ const valid=ranges.every(([a,b],i)=>Number.isFinite(a)&&Number.isFinite(b)&&a>=0&&b>a+.05&&(i===0?Math.abs(a)<.03:Math.abs(a-ranges[i-1][1])<.035));
+ if(!valid){$('timingHint').textContent='Las marcas deben empezar en 0:00, ir sin huecos y tener final. Carga audio si falta el último fin.';toast('Revisa las marcas de tiempo.');return false}
+ stopPreview();state.syncMode='exact';$('syncMode').value='exact';
+ state.scenes.forEach((scene,i)=>{scene.duration=Math.round((ranges[i][1]-ranges[i][0])*1000)/1000});
+ state.pausedAt=0;sync();$('timingStatus').textContent='✓ '+ranges.length+' imágenes';
+ $('timingHint').textContent='Aplicado: de 0:00 a '+detailedTime(totalDuration())+'. Puedes ajustar el campo Fin de cada imagen.';
+ toast('Sincronización exacta aplicada.');return true;
+}
+
 function totalDuration(){return state.scenes.reduce((s,item)=>s+item.duration,0)}
 function clamp(n,min,max){return Math.max(min,Math.min(max,n))}
 function dimensions(ratio,quality){const [a,b]=ratioNums[ratio];const edge=Number(quality);const w=Math.round(edge*(a>=b?a/b:1)/2)*2;const h=Math.round(edge*(b>=a?b/a:1)/2)*2;return [w,h]}
@@ -110,7 +137,7 @@ async function loadImage(file){const url=objectURL(file);try{
  return {url,img,name:file.name||'imagen',duration:state.duration,blurred:null};
  }catch(e){URL.revokeObjectURL(url);throw e}}
 function audioDuration(){const d=ui.audio.duration;return Number.isFinite(d)&&d>0?d:0}
-function syncScenesToAudio(showToast=true){
+function syncScenesToAudio(showToast=true){if(state.syncMode!=='equal'){if(showToast)toast('Para repartir por igual, elige sincronización simple.');return false}
  const duration=audioDuration();if(!duration||!state.scenes.length){if(showToast)toast('Primero agrega fotos y una narración.');updateSyncUI();return false}
  stopPreview();
  const n=state.scenes.length, totalMs=Math.round(duration*1000), ms=Math.floor(totalMs/n), extras=totalMs%n;
@@ -129,7 +156,7 @@ function updateSyncUI(){
  if(diff<0.08){ui.syncStatus.textContent='✓ Sincronizado';ui.syncExplain.textContent=count+' imágenes ajustadas a '+secFmt(duration)+' de narración. También puedes pulsar Sincronizar imágenes.';}
  else{ui.syncStatus.textContent='Por sincronizar';ui.syncExplain.textContent='La narración dura '+secFmt(duration)+'. Pulsa Sincronizar imágenes para ajustar las '+count+' escenas.';}
 }
-function autoSyncScenesToAudio(showToast=false){if(state.audioSync&&audioDuration()&&state.scenes.length)return syncScenesToAudio(showToast);return false}
+function autoSyncScenesToAudio(showToast=false){if(state.syncMode==='equal'&&audioDuration()&&state.scenes.length)return syncScenesToAudio(showToast);updateSyncUI();return false}
 function sync(){const n=state.scenes.length;ui.count.textContent=`${n} ${n===1?'imagen':'imágenes'}`;ui.scenesNumber.textContent=`(${n})`;ui.total.textContent=secFmt(totalDuration());ui.end.textContent=secFmt(totalDuration());ui.empty.hidden=n>0;ui.seek.disabled=n===0;ui.play.disabled=n===0;renderScenes();drawPreviewAt(state.pausedAt);updateSyncUI()}
 async function addFiles(files){const chosen=Array.from(files||[]).filter(f=>f.type.startsWith('image/')||/\.(heic|heif|jpe?g|png|webp|avif)$/i.test(f.name));if(!chosen.length){toast('Selecciona imágenes compatibles (JPG, PNG, HEIC o similares).');return}
  let ok=0;for(const file of chosen){try{state.scenes.push(await loadImage(file));ok++}catch(e){console.warn('Imagen no compatible:',file.name,e)}}
@@ -143,9 +170,15 @@ function renderScenes(){ui.scenes.replaceChildren();if(!state.scenes.length){con
   const name=document.createElement('span');name.className='scene-name';name.title=s.name;name.textContent=s.name;
   const ctrls=document.createElement('div');ctrls.className='scene-ctrls';
   const up=miniButton('↑',`Mover escena ${i+1} atrás`,()=>moveScene(i,-1));const down=miniButton('↓',`Mover escena ${i+1} adelante`,()=>moveScene(i,1));up.disabled=i===0;down.disabled=i===state.scenes.length-1;
-  const duration=document.createElement('input');duration.type='number';duration.className='scene-duration';duration.value=s.duration;duration.min='.5';duration.max='60';duration.step='.5';duration.setAttribute('aria-label',`Duración en segundos de escena ${i+1}`);
-  duration.onchange=()=>{const next=Number(duration.value);s.duration=Number.isFinite(next)?clamp(next,1,60):state.duration;duration.value=s.duration;stopPreview();state.pausedAt=0;sync()};
-  const remove=miniButton('×',`Eliminar escena ${i+1}`,()=>removeScene(i));remove.className='delete';ctrls.append(up,down,duration,remove);c.append(preview,name,ctrls);ui.scenes.append(c)
+  const duration=document.createElement('input');duration.type='number';duration.className='scene-duration';duration.value=s.duration;duration.min='.06';duration.max='999';duration.step='.01';duration.setAttribute('aria-label',`Duración en segundos de escena ${i+1}`);
+  duration.onchange=()=>{const next=Number(duration.value);s.duration=Number.isFinite(next)?clamp(next,.06,999):state.duration;duration.value=s.duration;state.syncMode='manual';stopPreview();state.pausedAt=0;sync()};
+  const remove=miniButton('×',`Eliminar escena ${i+1}`,()=>removeScene(i));remove.className='delete';ctrls.append(up,down,duration,remove);
+  const start=state.scenes.slice(0,i).reduce((a,b)=>a+b.duration,0);
+  const times=document.createElement('div');times.className='scene-times';
+  const lbl=document.createElement('small');lbl.textContent='Inicio '+detailedTime(start);
+  const end=document.createElement('input');end.type='text';end.value=detailedTime(start+s.duration);end.title='Fin mm:ss.ss';end.setAttribute('aria-label','Fin exacto de la imagen '+(i+1));
+  end.onchange=()=>{const sec=timeSeconds(end.value);if(!Number.isFinite(sec)||sec<=start+.05){toast('El fin debe ser posterior a '+detailedTime(start));end.value=detailedTime(start+s.duration);return}state.syncMode='manual';stopPreview();s.duration=Math.round((sec-start)*1000)/1000;state.pausedAt=0;sync()};
+  times.append(lbl,end);c.append(preview,name,ctrls,times);ui.scenes.append(c)
  })}
 function miniButton(text,label,fn){const b=document.createElement('button');b.type='button';b.textContent=text;b.title=label;b.setAttribute('aria-label',label);b.onclick=fn;return b}
 function moveScene(index,delta){const j=index+delta;if(j<0||j>=state.scenes.length)return;stopPreview();[state.scenes[index],state.scenes[j]]=[state.scenes[j],state.scenes[index]];state.active=j;state.pausedAt=0;sync();autoSyncScenesToAudio(false)}
@@ -258,7 +291,7 @@ async function makeZip(items){const chunks=[],central=[];let offset=0;for(const 
  const end=new Uint8Array([80,75,5,6,...u16(0),...u16(0),...u16(items.length),...u16(items.length),...u32(offset-startCentral),...u32(startCentral),...u16(0)]);
  return new Blob([...chunks,...central,end],{type:'application/zip'})}
 async function exportVideo(mode){if(state.exporting||!state.scenes.length){if(!state.scenes.length)toast('Primero importa imágenes.');return}
- stopPreview();if(mode==='all'&&state.audioUrl&&audioDuration())syncScenesToAudio(false);state.exporting=true;state.cancel=false;ui.download.hidden=true;$('exportAll').disabled=true;$('exportClips').disabled=true;await requestWake();
+ stopPreview();if(mode==='all'&&state.syncMode==='equal'&&state.audioUrl&&audioDuration())syncScenesToAudio(false);state.exporting=true;state.cancel=false;ui.download.hidden=true;$('exportAll').disabled=true;$('exportClips').disabled=true;await requestWake();
  try{
   if(mode==='all'){
    setProgress(0,'Exportando video completo…','Grabando en tiempo real. No cambies de aplicación.');
@@ -289,15 +322,20 @@ async function demo(){if(state.exporting)return;const demoFiles=await Promise.al
  drawDemoImage('ESCENA 02',['#dc5b8c','#6f43d0'],'square'),
  drawDemoImage('ESCENA 03',['#087879','#283991'],'circle')]);await addFiles(demoFiles)}
 function bind(){previewDimensions();drawPreviewAt(0);sync();
- $('photosInput').addEventListener('change',async e=>{await addFiles(e.target.files);e.target.value='' });$('addMore').onclick=()=>$('photosInput').click();$('demoBtn').onclick=demo;$('quickAdd').onclick=()=>$('photosInput').click();$('quickDemo').onclick=demo;$('quickAudio').onclick=()=>$('audioInput').click();$('quickSync').onclick=()=>{syncScenesToAudio(true)};$('emptyAdd').onclick=()=>$('photosInput').click();
+ $('photosInput').addEventListener('change',async e=>{await addFiles(e.target.files);e.target.value='' });$('addMore').onclick=()=>$('photosInput').click();$('demoBtn').onclick=demo;$('quickAdd').onclick=()=>$('photosInput').click();$('quickDemo').onclick=demo;$('quickAudio').onclick=()=>$('audioInput').click();$('quickSync').onclick=()=>{state.syncMode=$('syncMode').value;if(state.syncMode==='equal')syncScenesToAudio(true);else applyExactTimes()};$('emptyAdd').onclick=()=>$('photosInput').click();
  const drop=$('dropZone');drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('over')});drop.addEventListener('dragleave',()=>drop.classList.remove('over'));drop.addEventListener('drop',async e=>{e.preventDefault();drop.classList.remove('over');await addFiles(e.dataTransfer.files)});
  document.querySelectorAll('[data-ratio]').forEach(b=>b.onclick=()=>{if(state.exporting)return;stopPreview();state.ratio=b.dataset.ratio;document.querySelectorAll('[data-ratio]').forEach(el=>el.classList.toggle('active',el===b));previewDimensions();drawPreviewAt(state.pausedAt)});
  $('imageRatio').onchange=e=>{state.imageRatio=e.target.value;drawPreviewAt(state.pausedAt)};$('fitMode').onchange=e=>{state.fit=e.target.value;drawPreviewAt(state.pausedAt)};$('motion').onchange=e=>{state.motion=e.target.value;drawPreviewAt(state.pausedAt)};
  $('motionIntensity').oninput=e=>{state.motionIntensity=Number(e.target.value);$('motionAmount').textContent=state.motionIntensity+'% · '+(state.motionIntensity>=70?'Intenso':state.motionIntensity>=45?'Medio':'Suave');state.pausedAt=0;drawPreviewAt(0)};
- $('duration').oninput=e=>{state.duration=Number(e.target.value);$('durationValue').textContent=state.duration.toFixed(1)+' s';for(const s of state.scenes)s.duration=state.duration;stopPreview();state.pausedAt=0;sync()};
+ $('syncMode').onchange=e=>{state.syncMode=e.target.value;const equal=state.syncMode==='equal';$('applyTimes').textContent=equal?'⟳ Repartir audio por igual':'✓ Aplicar tiempos exactos';$('quickSync').textContent=equal?'⟳ Repartir audio':'⟳ Aplicar tiempos exactos';$('timingStatus').textContent=equal?'Modo simple':'Tiempos exactos'};
+ $('applyTimes').onclick=()=>{if(state.syncMode==='equal')syncScenesToAudio(true);else applyExactTimes()};
+ $('clearTimes').onclick=()=>{$('timecodes').value='';$('timingStatus').textContent='Sin aplicar';$('timingHint').textContent='Pega una marca por imagen. No se modificaron las duraciones actuales.'};
+ $('transitionType').onchange=e=>{state.transitionType=e.target.value};
+ $('transitionDuration').onchange=e=>{state.transitionDuration=Number(e.target.value)};
+ $('duration').oninput=e=>{state.duration=Number(e.target.value);$('durationValue').textContent=state.duration.toFixed(1)+' s';for(const s of state.scenes)s.duration=state.duration;state.syncMode='manual';stopPreview();state.pausedAt=0;sync()};
  $('quality').onchange=e=>{state.quality=Number(e.target.value)};
  ui.play.onclick=playPreview;ui.seek.oninput=e=>{stopPreview();state.pausedAt=totalDuration()*Number(e.target.value)/100;drawPreviewAt(state.pausedAt)};
- $('audioInput').onchange=e=>{const file=e.target.files?.[0];if(!file)return;stopPreview();if(state.audioUrl)URL.revokeObjectURL(state.audioUrl);state.audioUrl=objectURL(file);ui.audio.onloadedmetadata=()=>{if(state.scenes.length){syncScenesToAudio(false);toast('Audio cargado. Imágenes sincronizadas automáticamente.')}updateSyncUI()};ui.audio.src=state.audioUrl;ui.audio.load();ui.audioName.textContent=file.name;ui.audioButtons.hidden=false;e.target.value='';updateSyncUI();toast('Audio añadido. La sincronización se hará automáticamente.');};
+ $('audioInput').onchange=e=>{const file=e.target.files?.[0];if(!file)return;stopPreview();if(state.audioUrl)URL.revokeObjectURL(state.audioUrl);state.audioUrl=objectURL(file);ui.audio.onloadedmetadata=()=>{if(state.scenes.length&&state.syncMode==='equal'){syncScenesToAudio(false);toast('Modo simple: imágenes distribuidas por igual.')}else toast('Audio cargado. Pega las marcas exactas del guion para sincronizar.');updateSyncUI()};ui.audio.src=state.audioUrl;ui.audio.load();ui.audioName.textContent=file.name;ui.audioButtons.hidden=false;e.target.value='';updateSyncUI();toast('Audio añadido. La sincronización se hará automáticamente.');};
  $('removeAudio').onclick=()=>{stopPreview();if(state.audioUrl)URL.revokeObjectURL(state.audioUrl);state.audioUrl=null;ui.audio.removeAttribute('src');ui.audio.load();ui.audioName.textContent='Añadir audio';ui.audioButtons.hidden=true;updateSyncUI()};
  $('matchAudio').onclick=()=>{stopPreview();syncScenesToAudio(true)};
  $('exportAll').onclick=()=>exportVideo('all');$('exportClips').onclick=()=>exportVideo('clips');$('cancelExport').onclick=()=>{state.cancel=true;ui.progressDetail.textContent='Cancelando…'};
