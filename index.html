@@ -22,6 +22,9 @@
 .sync-explain{color:#aeb3ca;font-size:11px;line-height:1.45;margin:9px 0 0}
 @media(max-width:760px){.sync-quick{padding:13px;margin-bottom:13px}.sync-quick-head{flex-wrap:wrap}.sync-quick-actions{display:grid;grid-template-columns:1fr 1fr}.sync-quick-actions .button{font-size:11px;padding:10px 8px}}
 @media(max-width:370px){.sync-quick-actions{grid-template-columns:1fr}}
+.movement-quick{padding:13px 16px;border:1px solid #55408b;border-radius:14px;background:linear-gradient(120deg,#231d3c,#171c2c);margin-bottom:14px}
+.movement-head{display:flex;justify-content:space-between;align-items:center;gap:10px;margin-bottom:10px}.movement-head strong{font-size:13px;color:#eddfff}.movement-head span{font-size:11px;color:#c6afff}
+.movement-quick>label{font-size:11px;color:#d2cce1;display:block;margin-bottom:8px}.movement-quick input{display:block;width:100%}.movement-help{font-size:10px;line-height:1.5;color:#a9afc2;margin-top:7px}
 </style>
 </head>
 <body>
@@ -38,19 +41,22 @@
     <div class="setting-block"><label for="imageRatio">Relación de las imágenes <span class="mini-info">independiente</span></label><select id="imageRatio"><option value="auto">Automática — ocupar el video</option><option value="1:1">1:1 — Cuadrado</option><option value="9:16">9:16 — Vertical</option><option value="16:9">16:9 — Horizontal</option><option value="4:5">4:5 — Retrato</option></select></div>
     <div class="setting-block"><label for="fitMode">Relleno y fondo</label><select id="fitMode"><option value="cover">Rellenar el espacio (recorte)</option><option value="blur">Imagen completa + fondo difuminado</option></select></div>
     <div class="section-title"><span>02</span> Movimiento y duración</div>
-    <div class="setting-block"><label for="motion">Animación</label><select id="motion"><option value="kenburns-intense">Ken Burns intenso</option><option value="kenburns">Ken Burns suave</option><option value="zoom">Zoom cinematográfico</option><option value="pan">Paneo alternado ↔</option><option value="still">Sin movimiento</option></select><div class="setting-note">Movimiento continuo en cada imagen. El modo Ken Burns combina paneo y zoom para que la imagen siempre tenga vida.</div></div>
+    <div class="setting-block"><label for="motion">Animación</label><select id="motion"><option value="slide">Deslizamiento continuo ↔ (recomendado)</option><option value="kenburns-intense">Ken Burns intenso</option><option value="kenburns">Ken Burns suave</option><option value="zoom">Zoom cinematográfico</option><option value="pan">Paneo alternado ↔</option><option value="still">Sin movimiento</option></select><div class="setting-note">Movimiento continuo en cada imagen. El deslizamiento tiene velocidad constante del primer al último fotograma y alterna izquierda/derecha.</div></div>
     <div class="setting-block"><div class="setting-split"><label for="duration">Duración por imagen</label><strong id="durationValue">4.0 s</strong></div><input id="duration" type="range" min="3" max="5" step="0.5" value="4"/><div class="range-ticks"><span>3 s</span><span>4 s</span><span>5 s</span></div></div>
     <div class="section-title"><span>03</span> Narración (opcional)</div>
     <label class="audio-upload" for="audioInput"><span class="audio-symbol">♫</span><span class="audio-copy"><strong id="audioName">Añadir audio</strong><small>MP3, M4A, WAV y compatibles</small></span><span class="audio-add">+</span></label><input id="audioInput" type="file" accept="audio/*,.m4a" hidden><div class="audio-buttons" id="audioButtons" hidden><button id="removeAudio" class="text-button">Quitar narración</button><button id="matchAudio" class="text-button">Sincronizar imágenes con el audio</button></div><audio id="audioElement" preload="metadata"></audio>
   </aside>
-  <main class="workspace"><div class="workspace-header"><div><div class="eyebrow">VISTA PREVIA</div><h2>Tu estudio creativo <span class="badge">V3.1</span></h2></div><div class="workspace-tools"><span id="imageCount">0 imágenes</span><span id="totalTime">00:00</span></div></div>
+  <main class="workspace"><div class="workspace-header"><div><div class="eyebrow">VISTA PREVIA</div><h2>Tu estudio creativo <span class="badge">V3.2</span></h2></div><div class="workspace-tools"><span id="imageCount">0 imágenes</span><span id="totalTime">00:00</span></div></div>
     <div class="mobile-quick"><button class="button primary" id="quickAdd">＋ Agregar fotos</button><button class="button subtle" id="quickDemo">✦ Prueba rápida</button></div>
     <section class="sync-quick" aria-label="Sincronización de imágenes y audio">
       <div class="sync-quick-head"><strong>♫ Sincronización de audio</strong><span id="syncStatus" role="status" aria-live="polite">Sin narración</span></div>
       <div class="sync-quick-actions"><button type="button" class="button subtle" id="quickAudio">＋ Cargar audio</button><button type="button" class="button primary" id="quickSync">⟳ Sincronizar imágenes</button></div>
       <p class="sync-explain" id="syncExplain">Agrega fotos y tu narración. Las imágenes se ajustarán a la duración del audio.</p>
     </section>
-    <section class="preview-panel"><div class="preview-area"><div class="preview-frame" id="previewFrame"><canvas id="canvas" width="360" height="640" aria-label="Vista previa de video"></canvas><div class="empty-preview" id="emptyPreview"><div class="empty-glow"></div><div class="empty-play">▶</div><strong>Tu video comienza aquí</strong><p>Agrega fotografías o prueba el editor con imágenes de ejemplo.</p><button type="button" class="button primary" id="emptyAdd">＋ Elegir fotos</button></div></div></div><div class="player-bar"><button id="previewButton" class="round-button" aria-label="Reproducir vista previa">▶</button><div class="playback-progress"><input id="seek" type="range" min="0" max="100" value="0" aria-label="Posición de reproducción"/><div class="playback-times"><span id="currentTime">00:00</span><span id="endTime">00:00</span></div></div><div class="preview-quality">Vista previa</div></div></section>
+    <section class="movement-quick"><div class="movement-head"><strong>↔ Deslizamiento continuo</strong><span id="motionAmount">80% · Intenso</span></div>
+<label for="motionIntensity">Intensidad del movimiento</label><input id="motionIntensity" type="range" min="20" max="100" step="5" value="80" />
+<div class="movement-help">Las fotos se mueven todo el tiempo de un lado a otro, alternando sentido entre imágenes. Sin aceleraciones, frenadas ni rebotes.</div></section>
+<section class="preview-panel"><div class="preview-area"><div class="preview-frame" id="previewFrame"><canvas id="canvas" width="360" height="640" aria-label="Vista previa de video"></canvas><div class="empty-preview" id="emptyPreview"><div class="empty-glow"></div><div class="empty-play">▶</div><strong>Tu video comienza aquí</strong><p>Agrega fotografías o prueba el editor con imágenes de ejemplo.</p><button type="button" class="button primary" id="emptyAdd">＋ Elegir fotos</button></div></div></div><div class="player-bar"><button id="previewButton" class="round-button" aria-label="Reproducir vista previa">▶</button><div class="playback-progress"><input id="seek" type="range" min="0" max="100" value="0" aria-label="Posición de reproducción"/><div class="playback-times"><span id="currentTime">00:00</span><span id="endTime">00:00</span></div></div><div class="preview-quality">Vista previa</div></div></section>
     <section class="timeline"><div class="timeline-head"><div><div class="eyebrow">LÍNEA DE TIEMPO</div><h3>Escenas <span id="scenesNumber">(0)</span></h3></div><button class="button subtle" id="addMore">+ Agregar</button></div><div id="scenes" class="scene-list"><div class="timeline-empty">Tus imágenes aparecerán aquí. Podrás reordenarlas y cambiar su duración.</div></div><p class="hint">Usa ↑ ↓ para reorganizar las escenas. Pulsa una imagen para verla.</p></section>
     <section class="export-panel"><div class="export-info"><div class="eyebrow">PRODUCCIÓN FINAL</div><h3>Exportar video</h3><p>El video se procesa en tu dispositivo. Mantén Safari abierto y la pantalla encendida.</p></div><div class="export-config"><label for="quality">Resolución</label><select id="quality"><option value="720">720p · Recomendada en iPhone</option><option value="1080">1080p · Más calidad</option></select><div class="export-actions"><button id="exportAll" class="button primary">⬇ Exportar video completo</button><button id="exportClips" class="button outline">Exportar clips ZIP</button></div></div></section>
     <div id="exportProgress" class="progress-panel" hidden role="status" aria-live="polite"><div class="progress-top"><strong id="progressTitle">Procesando video…</strong><strong id="progressPercent">0%</strong></div><div class="progress-track"><div id="progressFill"></div></div><p id="progressDetail">Preparando…</p><button id="cancelExport" class="text-button">Cancelar exportación</button></div>
@@ -72,7 +78,7 @@ const ui = {
   download:$('downloadArea'),downloadLink:$('downloadLink'),downloadHint:$('downloadHint'),
   audio:$('audioElement'),audioName:$('audioName'),audioButtons:$('audioButtons'),toast:$('toast'),syncStatus:$('syncStatus'),syncExplain:$('syncExplain')
 };
-const state = {scenes:[],ratio:'9:16',imageRatio:'auto',fit:'cover',motion:'kenburns-intense',duration:4,quality:720,active:0,
+const state = {scenes:[],ratio:'9:16',imageRatio:'auto',fit:'cover',motion:'slide',motionIntensity:80,duration:4,quality:720,active:0,
    playStarted:0,pausedAt:0,previewing:false,playingFrame:0,exporting:false,cancel:false,activeRecorder:null,
    audioUrl:null,audioCtx:null,audioSource:null,audioDestination:null,wakeLock:null,lastDownloadUrl:null,audioSync:true};
 const ratioNums={'9:16':[9,16],'16:9':[16,9],'1:1':[1,1],'4:5':[4,5]};
@@ -133,6 +139,16 @@ function moveScene(index,delta){const j=index+delta;if(j<0||j>=state.scenes.leng
 function removeScene(index){stopPreview();const [s]=state.scenes.splice(index,1);URL.revokeObjectURL(s.url);state.active=clamp(state.active,0,Math.max(0,state.scenes.length-1));state.pausedAt=0;sync();autoSyncScenesToAudio(false)}
 function frameAt(time,scenes=state.scenes){let cursor=0;for(let i=0;i<scenes.length;i++){const end=cursor+scenes[i].duration;if(time<end||i===scenes.length-1){return {scene:scenes[i],index:i,p:clamp((time-cursor)/scenes[i].duration,0,1)}}cursor=end}return null}
 function renderImage(img,area,progress,index,mode){const {x,y,w,h}=area;const coverScale=Math.max(w/img.naturalWidth,h/img.naturalHeight);
+ if(mode==='slide'){
+  // Keyframes from first to last frame: no easing and no zoom animation.
+  const intensity=clamp(state.motionIntensity,20,100)/100;
+  const overscan=1.035+intensity*.54;
+  const dw=img.naturalWidth*coverScale*overscan,dh=img.naturalHeight*coverScale*overscan;
+  const availableX=Math.max(0,dw-w);const leftToRight=index%2===0;
+  const fraction=leftToRight?progress:1-progress;
+  const dx=x-availableX*fraction,dy=y-(dh-h)*.5;
+  ctx.save();ctx.beginPath();ctx.rect(x,y,w,h);ctx.clip();ctx.drawImage(img,dx,dy,dw,dh);ctx.restore();return;
+ }
  const eased=(1-Math.cos(progress*Math.PI))/2;let startScale=1,endScale=1,anchorX=.5,anchorY=.5;
  if(mode==='still'){startScale=1;endScale=1}
  else if(mode==='zoom'){startScale=1.03;endScale=1.16}
@@ -264,6 +280,7 @@ function bind(){previewDimensions();drawPreviewAt(0);sync();
  const drop=$('dropZone');drop.addEventListener('dragover',e=>{e.preventDefault();drop.classList.add('over')});drop.addEventListener('dragleave',()=>drop.classList.remove('over'));drop.addEventListener('drop',async e=>{e.preventDefault();drop.classList.remove('over');await addFiles(e.dataTransfer.files)});
  document.querySelectorAll('[data-ratio]').forEach(b=>b.onclick=()=>{if(state.exporting)return;stopPreview();state.ratio=b.dataset.ratio;document.querySelectorAll('[data-ratio]').forEach(el=>el.classList.toggle('active',el===b));previewDimensions();drawPreviewAt(state.pausedAt)});
  $('imageRatio').onchange=e=>{state.imageRatio=e.target.value;drawPreviewAt(state.pausedAt)};$('fitMode').onchange=e=>{state.fit=e.target.value;drawPreviewAt(state.pausedAt)};$('motion').onchange=e=>{state.motion=e.target.value;drawPreviewAt(state.pausedAt)};
+ $('motionIntensity').oninput=e=>{state.motionIntensity=Number(e.target.value);$('motionAmount').textContent=state.motionIntensity+'% · '+(state.motionIntensity>=70?'Intenso':state.motionIntensity>=45?'Medio':'Suave');state.pausedAt=0;drawPreviewAt(0)};
  $('duration').oninput=e=>{state.duration=Number(e.target.value);$('durationValue').textContent=state.duration.toFixed(1)+' s';for(const s of state.scenes)s.duration=state.duration;stopPreview();state.pausedAt=0;sync()};
  $('quality').onchange=e=>{state.quality=Number(e.target.value)};
  ui.play.onclick=playPreview;ui.seek.oninput=e=>{stopPreview();state.pausedAt=totalDuration()*Number(e.target.value)/100;drawPreviewAt(state.pausedAt)};
