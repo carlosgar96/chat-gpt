@@ -245,7 +245,8 @@ function drawTimelineAt(t,scenes=state.scenes,withTransitions=true){
  const mix=clamp((t-(cumulative-fade))/fade,0,1);
  const baseCtx=ctx;
  if(state.transitionType==='black'){
-  baseCtx.save();baseCtx.fillStyle='#000';baseCtx.globalAlpha=mix; // fade out before next scene
+  if(mix>.5){const buf=ensureTransitionCanvas();const nextCtx=buf.getContext('2d',{alpha:false});try{ctx=nextCtx;compose({scene:scenes[frame.index+1],index:frame.index+1,p:0})}finally{ctx=baseCtx}baseCtx.drawImage(buf,0,0)}
+  baseCtx.save();baseCtx.fillStyle='#000';baseCtx.globalAlpha=mix<=.5?mix*2:(1-mix)*2;
   baseCtx.fillRect(0,0,ui.canvas.width,ui.canvas.height);baseCtx.restore();return;
  }
  const buf=ensureTransitionCanvas();const nextCtx=buf.getContext('2d',{alpha:false});
