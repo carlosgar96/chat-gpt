@@ -1,0 +1,20 @@
+{
+  "name": "AutoEditor Studio — Editor de Video",
+  "short_name": "AutoEditor",
+  "description": "Editor automático de video para iPhone",
+  "start_url": "./?source=pwa",
+  "scope": "./",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#0b0e18",
+  "theme_color": "#0b0e18",
+  "lang": "es",
+  "icons": [
+    {
+      "src": "./assets/icon.svg",
+      "sizes": "any",
+      "type": "image/svg+xml",
+      "purpose": "any maskable"
+    }
+  ]
+}
