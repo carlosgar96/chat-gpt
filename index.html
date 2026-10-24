@@ -54,7 +54,7 @@
   </aside>
   <main class="workspace"><div class="workspace-header"><div><div class="eyebrow">VISTA PREVIA</div><h2>Tu estudio creativo <span class="badge">V6.3 · ZIP y sincronización</span></h2></div><div class="workspace-tools"><span id="imageCount">0 imágenes</span><span id="totalTime">00:00</span></div></div>
     <div class="mobile-quick"><button class="button primary" id="quickAdd">＋ Agregar fotos</button><button class="button subtle" id="quickDemo">✦ Prueba rápida</button><button class="button subtle" id="quickZip">📦 Importar ZIP original (con tiempos)</button></div>
-<div class="zip-info" id="zipInfo">Para mantener los nombres <strong>0-00.jpg, 0-04.jpg…</strong>, selecciona el archivo ZIP desde <strong>Archivos</strong> en lugar de pasar las fotos a la galería.</div>
+<div class="zip-info" id="zipInfo">Para mantener los nombres <strong>0-00.jpg, 0-04.jpg…</strong>, elige el ZIP en <strong>Archivos</strong>. El ZIP reemplazará las imágenes actuales, pero conservará la narración.</div>
     <section class="sync-quick" aria-label="Sincronización de imágenes y audio">
       <div class="sync-quick-head"><strong>♫ Sincronización de audio</strong><span id="syncStatus" role="status" aria-live="polite">Sin narración</span></div>
       <div class="sync-quick-actions"><button type="button" class="button subtle" id="quickAudio">＋ Cargar audio</button><button type="button" class="button primary" id="quickSync">♫ Detectar cortes en audio</button></div>
@@ -453,9 +453,13 @@ async function importZip(file){
    if(i%5===0)info.textContent='Importando ZIP: '+(i+1)+' de '+entries.length+' imágenes…';
   }
   const allStamped=prepared.every(x=>Number.isFinite(photoTimestamp(x.name)));
-  // Preserve filenames and files for the FFmpeg renderer. Do not pass through Photos.
+  // ZIP is a new image sequence: replace previous Gallery imports but preserve narration.
+  // Old IMG_... files must not remain in the timeline or corrupt timestamp matching.
+  stopPreview();
+  for(const old of state.scenes){if(old.url?.startsWith('blob:'))URL.revokeObjectURL(old.url)}
+  state.scenes=[];state.active=0;state.pausedAt=0;state.lastSyncMethod='none';
+  // Preserve filenames and real File bytes for FFmpeg uploads.
   await addFiles(prepared,{sortByTime:true,autoSync:false});
-  state.lastSyncMethod='none';
   if(allStamped){
     state.syncMode='names';$('syncMode').value='names';
     info.textContent='✓ '+prepared.length+' imágenes con nombre y tiempo originales. '+(audioDuration()?'Sincronizando con la narración…':'Carga la narración para aplicar estos tiempos.');
