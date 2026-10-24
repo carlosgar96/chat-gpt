@@ -171,7 +171,15 @@ function syncUsingAudioMode(){
  state.syncMode=$('syncMode').value;
  if(state.syncMode==='equal')return syncScenesToAudio(true);
  if(state.syncMode==='exact')return applyExactTimes();
- return syncFromPhotoNames(true);
+ if(syncFromPhotoNames(false))return true;
+ state.syncMode='equal';$('syncMode').value='equal';
+ const ok=syncScenesToAudio(false);
+ if(ok){
+   $('timingStatus').textContent='Audio repartido';
+   $('timingHint').textContent='Las fotos no tienen tiempos en sus nombres. Como Android 6.1, el audio se repartió por igual. Puedes ajustar los cortes escuchando la voz.';
+   toast('Imágenes ajustadas por igual a la duración del audio.');
+ }
+ return ok;
 }
 
 function applyExactTimes(){
@@ -454,6 +462,10 @@ async function exportOnServer(mode){
  if(state.exporting)return;
  if(!state.scenes.length)return toast('Primero agrega imágenes.');
  if(state.scenes.some(x=>!x.originalFile))return toast('Importa las fotos de nuevo para exportar.');
+ if(state.audioFile&&audioDuration()>0&&Math.abs(totalDuration()-audioDuration())>.35){
+   toast('Las imágenes no coinciden con la duración del audio. Usa Sincronizar con audio o Ajustar final al audio.');
+   return;
+ }
  stopPreview();state.exporting=true;state.cancel=false;
  ui.download.hidden=true;$('exportAll').disabled=true;$('exportClips').disabled=true;
  const form=new FormData();
