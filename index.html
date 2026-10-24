@@ -448,6 +448,58 @@ async function makeZip(items){const chunks=[],central=[];let offset=0;for(const 
  const startCentral=offset;for(const part of central)offset+=part.length;
  const end=new Uint8Array([80,75,5,6,...u16(0),...u16(0),...u16(items.length),...u16(items.length),...u32(offset-startCentral),...u32(startCentral),...u16(0)]);
  return new Blob([...chunks,...central,end],{type:'application/zip'})}
+
+const ENGINE_URL='https://autoeditor-studio-ffmpeg.onrender.com';
+async function exportOnServer(mode){
+ if(state.exporting)return;
+ if(!state.scenes.length)return toast('Primero agrega imágenes.');
+ if(state.scenes.some(x=>!x.originalFile))return toast('Importa las fotos de nuevo para exportar.');
+ stopPreview();state.exporting=true;state.cancel=false;
+ ui.download.hidden=true;$('exportAll').disabled=true;$('exportClips').disabled=true;
+ const form=new FormData();
+ for(const sc of state.scenes)form.append('images',sc.originalFile,sc.name);
+ if(state.audioFile)form.append('audio',state.audioFile,state.audioFile.name);
+ form.append('settings',JSON.stringify({
+   mode,scenes:state.scenes.map(x=>({name:x.name,duration:x.duration})),
+   ratio:state.ratio,quality:state.quality,fit:state.fit,
+   transition:mode==='full'&&state.transitionType==='fade'?'fade':'none',
+   transitionDuration:state.transitionDuration
+ }));
+ try{
+  setProgress(1,'Enviando archivos al motor FFmpeg…','El material se procesa temporalmente en Render.');
+  const response=await fetch(ENGINE_URL+'/jobs',{method:'POST',body:form});
+  let result=await response.json();
+  if(!response.ok)throw Error(result.error||'No se pudo iniciar el trabajo.');
+  const jobId=result.id;
+  let ready=false;
+  for(let attempts=0;attempts<180;attempts++){
+   if(state.cancel)throw Error('Exportación cancelada.');
+   await new Promise(resolve=>setTimeout(resolve,2200));
+   const reply=await fetch(ENGINE_URL+'/jobs/'+encodeURIComponent(jobId),{cache:'no-store'});
+   result=await reply.json();
+   if(!reply.ok||result.status==='error')throw Error(result.message||result.error||'Error al procesar.');
+   setProgress(result.progress||0,'Exportando con FFmpeg…',result.message||'Procesando escenas.');
+   if(result.status==='ready'){
+    const link=ENGINE_URL+'/jobs/'+encodeURIComponent(jobId)+'/download';
+    ui.download.hidden=false;
+    ui.downloadLink.href=link;
+    ui.downloadLink.download=result.filename||'AutoEditor.mp4';
+    ui.downloadLink.textContent='⬇ Descargar '+(result.filename||'video');
+    ui.downloadHint.textContent='Archivo generado. Pulsa Descargar para guardarlo en tu iPhone.';
+    setProgress(100,'¡Video terminado!','Descarga disponible.');
+    ready=true;break;
+   }
+  }
+  if(!ready)throw Error('El servidor no terminó la exportación a tiempo.');
+ }catch(err){
+  console.error(err);
+  ui.progress.hidden=true;
+  toast(err.message||'Error de exportación. Intenta 720p.');
+ }finally{
+  state.exporting=false;$('exportAll').disabled=false;$('exportClips').disabled=false;
+ }
+}
+
 async function exportVideo(mode){if(state.exporting||!state.scenes.length){if(!state.scenes.length)toast('Primero importa imágenes.');return}
  stopPreview();if(mode==='all'&&state.syncMode==='equal'&&state.audioUrl&&audioDuration())syncScenesToAudio(false);state.exporting=true;state.cancel=false;ui.download.hidden=true;$('exportAll').disabled=true;$('exportClips').disabled=true;await requestWake();
  try{
