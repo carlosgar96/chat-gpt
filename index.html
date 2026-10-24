@@ -167,19 +167,91 @@ function syncFromPhotoNames(showToast=true){
  if(showToast)toast(aligned?'Sincronización 6.1 aplicada usando el audio.':'Sincronización aplicada; revisa las imágenes sin marcas.');
  return true;
 }
-function syncUsingAudioMode(){
+
+async function syncByVoicePauses(showNotice=true){
+ if(state.voiceSyncInProgress)return false;
+ if(!state.audioFile||!state.scenes.length||!audioDuration()){if(showNotice)toast('Importa las fotos y una narración válida.');return false}
+ state.voiceSyncInProgress=true;
+ const itemCount=state.scenes.length,total=audioDuration(),minDuration=Math.min(1.1,total/(itemCount*2));
+ try{
+  if(total<itemCount*.18){if(showNotice)toast('El audio es demasiado corto para esas imágenes.');return false}
+  $('timingStatus').textContent='Analizando voz…';
+  const C=window.AudioContext||window.webkitAudioContext;
+  if(!C)throw Error('El navegador no permite analizar el audio.');
+  const ac=new C();
+  let decoded;
+  try{const raw=await state.audioFile.arrayBuffer();decoded=await ac.decodeAudioData(raw.slice(0))}
+  finally{await ac.close().catch(()=>{})}
+  const sr=decoded.sampleRate,chan=decoded.getChannelData(0),other=decoded.numberOfChannels>1?decoded.getChannelData(1):null;
+  const interval=.025,frames=Math.floor(decoded.duration/interval),windowSamples=Math.max(1,Math.round(sr*interval));
+  const energy=new Float32Array(frames);
+  for(let i=0;i<frames;i++){
+   const start=i*windowSamples,end=Math.min(start+windowSamples,chan.length);
+   const skip=Math.max(1,Math.floor((end-start)/220));
+   let accum=0,count=0;
+   for(let p=start;p<end;p+=skip){const y=other?(chan[p]+other[p])*.5:chan[p];accum+=y*y;count++}
+   energy[i]=Math.sqrt(accum/Math.max(1,count));
+  }
+  const sorted=Array.from(energy).sort((a,b)=>a-b);
+  const quiet=sorted[Math.floor(sorted.length*.12)]||0;
+  const speech=sorted[Math.floor(sorted.length*.75)]||0;
+  const threshold=Math.max(.0009,quiet+(speech-quiet)*.19);
+  const pauses=[];
+  let open=-1;
+  for(let i=0;i<=energy.length;i++){
+   const silent=i<energy.length&&energy[i]<threshold;
+   if(silent&&open<0)open=i;
+   else if(!silent&&open>=0){
+     if((i-open)*interval>=.13){
+       const middle=(open+i)*interval*.5;
+       if(middle>minDuration&&middle<total-minDuration)pauses.push({time:middle,span:(i-open)*interval})
+     }
+     open=-1
+   }
+  }
+  const boundaries=[0],used=[];
+  let aligned=0;
+  for(let i=1;i<itemCount;i++){
+   const left=boundaries[i-1],remaining=itemCount-i;
+   const target=left+(total-left)/(remaining+1);
+   const allowedLow=left+minDuration,allowedHigh=total-remaining*minDuration;
+   const range=Math.max(.85,Math.min(2.2,1.4*total/itemCount));
+   const candidates=pauses.filter(p=>p.time>=allowedLow&&p.time<=allowedHigh&&Math.abs(p.time-target)<=range);
+   candidates.sort((a,b)=>(Math.abs(a.time-target)-Math.min(a.span,.65)*.45)-(Math.abs(b.time-target)-Math.min(b.span,.65)*.45));
+   const picked=candidates[0];
+   const next=picked?picked.time:Math.max(allowedLow,Math.min(allowedHigh,target));
+   if(picked)aligned++;
+   boundaries.push(next);
+   if(picked)used.push(picked)
+  }
+  boundaries.push(total);
+  const samples=boundaries.slice(1).map((t,i)=>Math.round((t-boundaries[i])*1000)/1000);
+  if(samples.some(x=>!Number.isFinite(x)||x<=.14))throw Error('No se pudieron calcular intervalos válidos.');
+  // Compensate rounding in the final scene to keep the audio duration exact.
+  samples[samples.length-1]=Math.round((total-samples.slice(0,-1).reduce((a,b)=>a+b,0))*1000)/1000;
+  stopPreview();
+  state.scenes.forEach((scene,i)=>scene.duration=samples[i]);
+  state.pausedAt=0;state.syncMode='voice';$('syncMode').value='voice';
+  state.lastSyncMethod='voice';state.lastSyncCuts=aligned;
+  sync();
+  $('timingStatus').textContent='✓ '+aligned+' pausas de '+(itemCount-1);
+  $('timingHint').textContent=aligned?aligned+' cambios de imagen se alinearon con pausas en la voz. Los demás mantienen una separación aproximada. Revisa qué imagen corresponde a cada frase.':'No detecté pausas suficientemente claras. Los cortes se distribuyeron aproximadamente. Puedes marcarlos escuchando la narración.';
+  if(showNotice)toast('Audio analizado: '+aligned+' cortes apoyados en pausas; revisa los demás.');
+  return true;
+ }catch(err){
+  console.warn('Speech pause sync',err);
+  if(showNotice)toast('No se pudo analizar la voz. Usa sincronización simple o cortes manuales.');
+  $('timingStatus').textContent='No se pudo analizar';
+  return false;
+ }finally{state.voiceSyncInProgress=false}
+}
+
+async function syncUsingAudioMode(){
  state.syncMode=$('syncMode').value;
  if(state.syncMode==='equal')return syncScenesToAudio(true);
  if(state.syncMode==='exact')return applyExactTimes();
- if(syncFromPhotoNames(false))return true;
- state.syncMode='equal';$('syncMode').value='equal';
- const ok=syncScenesToAudio(false);
- if(ok){
-   $('timingStatus').textContent='Audio repartido';
-   $('timingHint').textContent='Las fotos no tienen tiempos en sus nombres. Como Android 6.1, el audio se repartió por igual. Puedes ajustar los cortes escuchando la voz.';
-   toast('Imágenes ajustadas por igual a la duración del audio.');
- }
- return ok;
+ if(state.syncMode==='names')return syncFromPhotoNames(true);
+ return await syncByVoicePauses(true);
 }
 
 function applyExactTimes(){
