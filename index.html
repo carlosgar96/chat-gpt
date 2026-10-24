@@ -240,9 +240,13 @@ async function syncByVoicePauses(showNotice=true){
   return true;
  }catch(err){
   console.warn('Speech pause sync',err);
-  if(showNotice)toast('No se pudo analizar la voz. Usa sincronización simple o cortes manuales.');
-  $('timingStatus').textContent='No se pudo analizar';
-  return false;
+  state.voiceSyncInProgress=false;
+  state.syncMode='equal';$('syncMode').value='equal';
+  const used=syncScenesToAudio(false);
+  $('timingStatus').textContent='Duración ajustada · sin análisis de pausas';
+  $('timingHint').textContent='Safari no permitió analizar la forma de onda. Las imágenes coinciden con la duración del audio, pero los cambios no están alineados con frases. Marca los cortes escuchando la voz.';
+  if(showNotice)toast('No pude detectar pausas: usé la duración exacta del audio. Ajusta los cortes manualmente.');
+  return used;
  }finally{state.voiceSyncInProgress=false}
 }
 
