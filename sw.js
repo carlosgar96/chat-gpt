@@ -1,4 +1,4 @@
-const CACHE='autoeditor-iphone-pwa-v6-1-audio-voice-20261024';
+const CACHE='autoeditor-studio-v6-2-guided-sync-full-image-20261023';
 const ASSETS=['./','./index.html','./manifest.webmanifest','./assets/icon.svg'];
 self.addEventListener('install',e=>e.waitUntil(caches.open(CACHE).then(c=>c.addAll(ASSETS)).then(()=>self.skipWaiting())));
 self.addEventListener('activate',e=>e.waitUntil(caches.keys().then(keys=>Promise.all(keys.filter(k=>k!==CACHE).map(k=>caches.delete(k)))).then(()=>self.clients.claim())));
