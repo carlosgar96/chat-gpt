@@ -157,7 +157,7 @@ function syncFromPhotoNames(showToast=true){
  }
  stopPreview();
  state.scenes=named.map((v,i)=>({...v.scene,duration:Math.round(durations[i]*1000)/1000}));
- state.active=0;state.pausedAt=0;state.syncMode='names';$('syncMode').value='names';
+ state.active=0;state.pausedAt=0;state.syncMode='names';state.lastSyncMethod='names';state.lastSyncCuts=valid.length-1;$('syncMode').value='names';
  sync();
  const aligned=valid.length===named.length;
  $('timingStatus').textContent=aligned?'✓ Audio + nombres':'✓ Audio + tiempos aproximados';
@@ -261,7 +261,7 @@ function applyExactTimes(){
  const valid=ranges.every(([a,b],i)=>Number.isFinite(a)&&Number.isFinite(b)&&a>=0&&b>a+.05&&(i===0?Math.abs(a)<.03:Math.abs(a-ranges[i-1][1])<.035));
  if(!valid){$('timingHint').textContent='Las marcas deben empezar en 0:00, ir sin huecos y tener final. Carga audio si falta el último fin.';toast('Revisa las marcas de tiempo.');return false}
  stopPreview();state.syncMode='exact';$('syncMode').value='exact';
- state.scenes.forEach((scene,i)=>{scene.duration=Math.round((ranges[i][1]-ranges[i][0])*1000)/1000});
+ state.scenes.forEach((scene,i)=>{scene.duration=Math.round((ranges[i][1]-ranges[i][0])*1000)/1000});state.lastSyncMethod='manual';
  state.pausedAt=0;sync();$('timingStatus').textContent='✓ '+ranges.length+' imágenes';
  $('timingHint').textContent='Aplicado: de 0:00 a '+detailedTime(totalDuration())+'. Puedes ajustar el campo Fin de cada imagen.';
  toast('Sincronización exacta aplicada.');return true;
@@ -278,7 +278,7 @@ function markCutFromAudio(){
  if(position<begin+.15){toast('El audio debe avanzar después del inicio '+preciseSec(begin)+'.');return}
  if(position>audioDuration()+.05){toast('El corte está después del final del audio.');return}
  const wasPlaying=state.previewing;stopPreview();
- state.scenes[i].duration=Math.round((position-begin)*1000)/1000;
+ state.scenes[i].duration=Math.round((position-begin)*1000)/1000;state.lastSyncMethod='manual';
  state.active=Math.min(i+1,state.scenes.length-1);
  state.pausedAt=position;
  try{ui.audio.currentTime=position}catch{}
@@ -291,7 +291,7 @@ function fitFinalSceneToAudio(){
  if(!state.scenes.length||!end){toast('Añade imágenes y narración primero.');return}
  const start=sceneBeginning(state.scenes.length-1);
  if(end<=start+.15){toast('La narración es más corta que las imágenes anteriores. Corrige los cortes.');return}
- state.scenes[state.scenes.length-1].duration=Math.round((end-start)*1000)/1000;
+ state.scenes[state.scenes.length-1].duration=Math.round((end-start)*1000)/1000;state.lastSyncMethod='manual';
  sync();toast('Última imagen ajustada al audio: '+preciseSec(end)+'.')
 }
 function showPhotoComplete(){state.fit='blur';state.imageRatio='auto';$('fitMode').value='blur';$('imageRatio').value='auto';drawPreviewAt(state.pausedAt);toast('Imagen completa, sin recorte ni zoom agresivo.')}
@@ -311,6 +311,7 @@ function syncScenesToAudio(showToast=true){if(state.syncMode!=='equal'){if(showT
  stopPreview();
  const n=state.scenes.length, totalMs=Math.round(duration*1000), ms=Math.floor(totalMs/n), extras=totalMs%n;
  state.scenes.forEach((scene,index)=>{scene.duration=(ms+(index<extras?1:0))/1000});
+ state.lastSyncMethod='equal';state.lastSyncCuts=0;
  state.pausedAt=0;sync();
  if(showToast)toast('Listo: las imágenes duran lo mismo que tu narración.');
  return true;
@@ -330,7 +331,13 @@ function updateSyncUI(){
   ui.syncExplain.textContent='Imágenes: '+preciseSec(totalDuration())+' · Audio: '+preciseSec(duration)+'. Pulsa Detectar cortes en audio.';
  }
 }
-function autoSyncScenesToAudio(showToast=false){if(state.syncMode==='equal'&&audioDuration()&&state.scenes.length)return syncScenesToAudio(showToast);updateSyncUI();return false}
+async function autoSyncScenesToAudio(showToast=false){
+ if(!state.audioFile||!audioDuration()||!state.scenes.length||state.lastSyncMethod==='manual')return false;
+ if(state.syncMode==='equal')return syncScenesToAudio(showToast);
+ if(state.syncMode==='names')return syncFromPhotoNames(showToast);
+ if(state.syncMode==='voice')return syncByVoicePauses(showToast);
+ updateSyncUI();return false;
+}
 function sync(){const n=state.scenes.length;ui.count.textContent=`${n} ${n===1?'imagen':'imágenes'}`;ui.scenesNumber.textContent=`(${n})`;ui.total.textContent=secFmt(totalDuration());ui.end.textContent=secFmt(totalDuration());ui.empty.hidden=n>0;ui.seek.disabled=n===0;ui.play.disabled=n===0;renderScenes();drawPreviewAt(state.pausedAt);updateSyncUI()}
 async function addFiles(files){const chosen=Array.from(files||[]).filter(f=>f.type.startsWith('image/')||/\.(heic|heif|jpe?g|png|webp|avif)$/i.test(f.name));if(!chosen.length){toast('Selecciona imágenes compatibles (JPG, PNG, HEIC o similares).');return}
  let ok=0;for(const file of chosen){try{state.scenes.push(await loadImage(file));ok++}catch(e){console.warn('Imagen no compatible:',file.name,e)}}
@@ -641,7 +648,7 @@ function bind(){previewDimensions();drawPreviewAt(0);sync();
  document.querySelectorAll('[data-ratio]').forEach(b=>b.onclick=()=>{if(state.exporting)return;stopPreview();state.ratio=b.dataset.ratio;document.querySelectorAll('[data-ratio]').forEach(el=>el.classList.toggle('active',el===b));previewDimensions();drawPreviewAt(state.pausedAt)});
  $('imageRatio').onchange=e=>{state.imageRatio=e.target.value;drawPreviewAt(state.pausedAt)};$('fitMode').onchange=e=>{state.fit=e.target.value;drawPreviewAt(state.pausedAt)};$('motion').onchange=e=>{state.motion=e.target.value;drawPreviewAt(state.pausedAt)};
  $('motionIntensity').oninput=e=>{state.motionIntensity=Number(e.target.value);$('motionAmount').textContent=state.motionIntensity+'% · '+(state.motionIntensity>=70?'Intenso':state.motionIntensity>=45?'Medio':'Suave');state.pausedAt=0;drawPreviewAt(0)};
- $('syncMode').onchange=e=>{state.syncMode=e.target.value;const equal=state.syncMode==='equal',exact=state.syncMode==='exact';$('applyTimes').textContent=equal?'⟳ Repartir audio por igual':exact?'✓ Aplicar marcas manuales':'♫ Sincronizar con audio (6.1)';$('quickSync').textContent=equal?'⟳ Repartir audio':exact?'⟳ Aplicar marcas':'♫ Sincronizar con audio';$('timingStatus').textContent=equal?'Modo simple':exact?'Marcas manuales':'Desde nombres + audio'};
+ $('syncMode').onchange=e=>{state.syncMode=e.target.value;const equal=state.syncMode==='equal',exact=state.syncMode==='exact',names=state.syncMode==='names';$('applyTimes').textContent=equal?'⟳ Repartir por igual':exact?'✓ Aplicar marcas manuales':names?'♫ Sincronizar por nombres':'♫ Detectar pausas del audio';$('quickSync').textContent=equal?'⟳ Repartir audio':exact?'⟳ Aplicar marcas':names?'♫ Usar nombres':'♫ Detectar cortes en audio';$('timingStatus').textContent=equal?'Modo simple':exact?'Marcas manuales':names?'Desde nombres':'Análisis de voz'};
  $('applyTimes').onclick=syncUsingAudioMode;
  $('clearTimes').onclick=()=>{$('timecodes').value='';$('timingStatus').textContent='Sin aplicar';$('timingHint').textContent='Pega una marca por imagen. No se modificaron las duraciones actuales.'};
  $('transitionType').onchange=e=>{state.transitionType=e.target.value};
@@ -649,9 +656,13 @@ function bind(){previewDimensions();drawPreviewAt(0);sync();
  $('duration').oninput=e=>{state.duration=Number(e.target.value);$('durationValue').textContent=state.duration.toFixed(1)+' s';for(const s of state.scenes)s.duration=state.duration;state.syncMode='manual';stopPreview();state.pausedAt=0;sync()};
  $('quality').onchange=e=>{state.quality=Number(e.target.value)};
  ui.play.onclick=playPreview;ui.seek.oninput=e=>{stopPreview();state.pausedAt=totalDuration()*Number(e.target.value)/100;if(state.audioUrl){try{ui.audio.currentTime=state.pausedAt}catch{}}drawPreviewAt(state.pausedAt)};ui.audio.addEventListener('seeked',()=>{if(!state.previewing&&!state.exporting&&state.audioUrl){state.pausedAt=clamp(ui.audio.currentTime,0,totalDuration());drawPreviewAt(state.pausedAt)}});
- $('audioInput').onchange=e=>{const file=e.target.files?.[0];if(!file)return;stopPreview();if(state.audioUrl)URL.revokeObjectURL(state.audioUrl);state.audioFile=file;state.audioUrl=objectURL(file);ui.audio.onloadedmetadata=()=>{if(state.scenes.length&&state.syncMode==='equal'){syncScenesToAudio(false);toast('Modo simple: imágenes distribuidas por igual.')}else toast('Audio cargado: usa Sincronizar 6.1 o marca cortes escuchando la voz.');updateSyncUI();updateAudioPosition()};ui.audio.src=state.audioUrl;ui.audio.load();ui.audioName.textContent=file.name;ui.audioButtons.hidden=false;e.target.value='';updateSyncUI();toast('Audio añadido. La sincronización se hará automáticamente.');};
+ $('audioInput').onchange=e=>{const file=e.target.files?.[0];if(!file)return;stopPreview();if(state.audioUrl)URL.revokeObjectURL(state.audioUrl);state.audioFile=file;state.audioUrl=objectURL(file);ui.audio.onloadedmetadata=()=>{updateSyncUI();updateAudioPosition();if(state.scenes.length){
+   if(state.syncMode==='voice')toast('Analizando pausas del audio para ajustar las imágenes…');
+   autoSyncScenesToAudio(true).catch(err=>console.warn(err));
+ }else toast('Audio cargado. Agrega las imágenes para sincronizar.');
+ };ui.audio.src=state.audioUrl;ui.audio.load();ui.audioName.textContent=file.name;ui.audioButtons.hidden=false;e.target.value='';updateSyncUI();toast('Audio añadido. La sincronización se hará automáticamente.');};
  $('removeAudio').onclick=()=>{stopPreview();if(state.audioUrl)URL.revokeObjectURL(state.audioUrl);state.audioUrl=null;state.audioFile=null;ui.audio.removeAttribute('src');ui.audio.load();ui.audioName.textContent='Añadir audio';ui.audioButtons.hidden=true;updateSyncUI()};
- $('matchAudio').onclick=()=>{stopPreview();syncScenesToAudio(true)};
+ $('matchAudio').onclick=()=>{stopPreview();syncUsingAudioMode()};
  $('exportAll').onclick=()=>exportOnServer('full');$('exportClips').onclick=()=>exportOnServer('clips');$('cancelExport').onclick=()=>{state.cancel=true;ui.progressDetail.textContent='Cancelando…'};
  $('helpBtn').onclick=()=>$('helpDialog').showModal();$('closeHelp').onclick=()=>$('helpDialog').close();$('understood').onclick=()=>$('helpDialog').close();
  window.addEventListener('visibilitychange',()=>{if(document.hidden){if(state.previewing){state.pausedAt=0;stopPreview()}if(state.exporting)state.cancel=true}});
