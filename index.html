@@ -29,7 +29,7 @@
 .audio-timeline-panel{padding:14px 16px;border:1px solid #6856a3;border-radius:14px;background:linear-gradient(125deg,#22213a,#171f30);margin-bottom:14px}.audio-timeline-panel>div:first-child{display:flex;align-items:center;justify-content:space-between;gap:10px}.audio-timeline-panel strong{color:#ede3ff;font-size:13px}.audio-timeline-panel span{font-variant-numeric:tabular-nums;color:#d6c9ff;font-size:12px;background:#343052;padding:6px;border-radius:7px}.audio-timeline-panel p{color:#aeb8ca;font-size:11px;line-height:1.6;margin:9px 0}.audio-timeline-actions{display:flex;flex-wrap:wrap;gap:7px}.audio-timeline-actions>.button{flex:1;min-width:110px;font-size:11px}@media(max-width:520px){.audio-timeline-actions{display:grid;grid-template-columns:1fr 1fr}.audio-timeline-actions .button{min-width:0;padding:8px 5px}.audio-timeline-actions .button:last-child{grid-column:1/-1}}
 .audio-timeline-actions #startGuidedSync{flex-basis:100%}.sync-instruction{font-size:12px;color:#f1e8ff;margin-top:9px;line-height:1.5}
 .frame-mode-tip{border:1px solid #665892;border-radius:10px;background:#19182c;color:#e3d8ff;font-size:11px;padding:8px 10px;margin-bottom:9px}
-</style>
+.zip-sidebar-button{margin-top:10px}.zip-info{font-size:11px;line-height:1.5;color:#c7bbf2;background:#211d37;border:1px solid #59477d;border-radius:12px;padding:10px 13px;margin:0 0 15px}.mobile-quick #quickZip{width:100%;grid-column:1/-1}.mobile-quick #quickZip .icon{margin-right:4px}@media(max-width:760px){.zip-info{margin-bottom:14px}} </style>
 </head>
 <body>
 <div class="app-shell">
@@ -39,6 +39,8 @@
     <div class="sidebar-top"><div class="eyebrow">TU PROYECTO</div><h1>Crea tu video <em>en segundos.</em></h1><p>Importa imágenes, define el movimiento y exporta directamente desde tu iPhone.</p></div>
     <label class="upload-tile" for="photosInput" id="dropZone"><svg width="30" height="30" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M12 16V4m0 0-4 4m4-4 4 4M4 16v3a1 1 0 0 0 1 1h14a1 1 0 0 0 1-1v-3" stroke-linecap="round" stroke-linejoin="round"/></svg><strong>Agregar imágenes</strong><span>Toca para elegir varias fotos</span><span class="upload-formats">JPG · PNG · HEIC*</span></label>
     <input id="photosInput" type="file" accept="image/*,.heic,.heif" multiple hidden>
+    <input id="zipInput" type="file" accept=".zip,application/zip,application/x-zip-compressed" hidden>
+    <button type="button" class="button subtle button-wide zip-sidebar-button" id="zipSide">📦 Importar ZIP con tiempos originales</button>
     <button class="button ghost button-wide" id="demoBtn">✦ Probar con imágenes de ejemplo</button>
     <div class="section-title"><span>01</span> Configuración de video</div>
     <div class="setting-block"><label for="videoRatio">Formato del video</label><div class="ratio-options" id="videoRatio" role="group" aria-label="Formato del video"><button class="ratio-button active" data-ratio="9:16">9:16<small>Reels</small></button><button class="ratio-button" data-ratio="1:1">1:1<small>Cuadrado</small></button><button class="ratio-button" data-ratio="16:9">16:9<small>Horizontal</small></button><button class="ratio-button" data-ratio="4:5">4:5<small>Feed</small></button></div></div>
@@ -50,8 +52,9 @@
     <div class="section-title"><span>03</span> Narración (opcional)</div>
     <label class="audio-upload" for="audioInput"><span class="audio-symbol">♫</span><span class="audio-copy"><strong id="audioName">Añadir audio</strong><small>MP3, M4A, WAV y compatibles</small></span><span class="audio-add">+</span></label><input id="audioInput" type="file" accept="audio/*,.m4a" hidden><div class="audio-buttons" id="audioButtons" hidden><button id="removeAudio" class="text-button">Quitar narración</button><button id="matchAudio" class="text-button">Sincronizar imágenes con el audio</button></div><audio id="audioElement" preload="metadata"></audio>
   </aside>
-  <main class="workspace"><div class="workspace-header"><div><div class="eyebrow">VISTA PREVIA</div><h2>Tu estudio creativo <span class="badge">V6.2 · Audio y foto completa</span></h2></div><div class="workspace-tools"><span id="imageCount">0 imágenes</span><span id="totalTime">00:00</span></div></div>
-    <div class="mobile-quick"><button class="button primary" id="quickAdd">＋ Agregar fotos</button><button class="button subtle" id="quickDemo">✦ Prueba rápida</button></div>
+  <main class="workspace"><div class="workspace-header"><div><div class="eyebrow">VISTA PREVIA</div><h2>Tu estudio creativo <span class="badge">V6.3 · ZIP y sincronización</span></h2></div><div class="workspace-tools"><span id="imageCount">0 imágenes</span><span id="totalTime">00:00</span></div></div>
+    <div class="mobile-quick"><button class="button primary" id="quickAdd">＋ Agregar fotos</button><button class="button subtle" id="quickDemo">✦ Prueba rápida</button><button class="button subtle" id="quickZip">📦 Importar ZIP original (con tiempos)</button></div>
+<div class="zip-info" id="zipInfo">Para mantener los nombres <strong>0-00.jpg, 0-04.jpg…</strong>, selecciona el archivo ZIP desde <strong>Archivos</strong> en lugar de pasar las fotos a la galería.</div>
     <section class="sync-quick" aria-label="Sincronización de imágenes y audio">
       <div class="sync-quick-head"><strong>♫ Sincronización de audio</strong><span id="syncStatus" role="status" aria-live="polite">Sin narración</span></div>
       <div class="sync-quick-actions"><button type="button" class="button subtle" id="quickAudio">＋ Cargar audio</button><button type="button" class="button primary" id="quickSync">♫ Detectar cortes en audio</button></div>
@@ -88,6 +91,7 @@
 </div>
 <div class="toast" id="toast" role="status" aria-live="polite"></div>
 <dialog id="helpDialog" class="help-dialog"><div class="dialog-head"><h3>Instalar en iPhone</h3><button id="closeHelp" class="icon-button" aria-label="Cerrar">×</button></div><p>Abre la dirección de AutoEditor Studio en <strong>Safari</strong>. Toca el botón <strong>Compartir</strong> y luego <strong>Añadir a pantalla de inicio</strong>. Confirma «Añadir».</p><p>Para crear videos: agrega imágenes, ajusta formatos y movimiento, añade tu narración y usa <strong>Sincronizar imágenes con el audio</strong> para que el video termine exactamente al final de la voz. La primera prueba recomendada es con 3 imágenes a 720p.</p><p><strong>Nota:</strong> la exportación ocurre en tiempo real y el formato MP4 o WebM dependerá de lo admitido por Safari. En algunos teléfonos podría fallar por límites de memoria o grabación. El proyecto no se guarda automáticamente al cerrar.</p><button class="button primary button-wide" id="understood">Entendido</button></dialog>
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js"></script>
 <script type="module">
 'use strict';
 const $ = (id) => document.getElementById(id);
@@ -393,9 +397,76 @@ async function autoSyncScenesToAudio(showToast=false){
  updateSyncUI();return false;
 }
 function sync(){const n=state.scenes.length;ui.count.textContent=`${n} ${n===1?'imagen':'imágenes'}`;ui.scenesNumber.textContent=`(${n})`;ui.total.textContent=secFmt(totalDuration());ui.end.textContent=secFmt(totalDuration());ui.empty.hidden=n>0;ui.seek.disabled=n===0;ui.play.disabled=n===0;renderScenes();drawPreviewAt(state.pausedAt);updateSyncUI()}
-async function addFiles(files){const chosen=Array.from(files||[]).filter(f=>f.type.startsWith('image/')||/\.(heic|heif|jpe?g|png|webp|avif)$/i.test(f.name));if(!chosen.length){toast('Selecciona imágenes compatibles (JPG, PNG, HEIC o similares).');return}
- let ok=0;for(const file of chosen){try{state.scenes.push(await loadImage(file));ok++}catch(e){console.warn('Imagen no compatible:',file.name,e)}}
- if(ok){state.pausedAt=0;sync();autoSyncScenesToAudio(false);toast(`${ok} ${ok===1?'imagen agregada':'imágenes agregadas'}.`)}else{toast('No se pudieron abrir estas imágenes. Prueba con JPG o PNG.')}}
+async function addFiles(files,{sortByTime=false,autoSync=true}={}){
+ let chosen=Array.from(files||[]).filter(f=>f.type.startsWith('image/')||/\.(heic|heif|jpe?g|png|webp|avif)$/i.test(f.name));
+ if(!chosen.length){toast('Selecciona imágenes JPG, PNG, WEBP o HEIC.');return}
+ if(sortByTime||chosen.every(f=>Number.isFinite(photoTimestamp(f.name)))){
+  chosen=chosen.sort((a,b)=>{const x=photoTimestamp(a.name),y=photoTimestamp(b.name);return Number.isFinite(x)&&Number.isFinite(y)?x-y||a.name.localeCompare(b.name,undefined,{numeric:true}):a.name.localeCompare(b.name,undefined,{numeric:true})});
+ }
+ let ok=0;for(const file of chosen){try{state.scenes.push(await loadImage(file));ok++}catch(e){console.warn('Imagen incompatible:',file.name,e)}}
+ if(ok){
+  state.pausedAt=0;
+  if(chosen.length===ok&&state.scenes.every(x=>Number.isFinite(photoTimestamp(x.name)))&&state.lastSyncMethod!=='manual'){
+   state.syncMode='names';$('syncMode').value='names';
+  }
+  sync();
+  if(autoSync)await autoSyncScenesToAudio(false);
+  toast(ok+' imágenes añadidas.');
+ }else toast('No se pudieron abrir las imágenes.');
+}
+
+async function importZip(file){
+ if(!file||state.exporting)return;
+ if(!/\.zip$/i.test(file.name))return toast('Selecciona un archivo ZIP desde Archivos.');
+ if(file.size>130*1024*1024)return toast('El ZIP supera 130 MB. Divídelo en paquetes más pequeños.');
+ if(!window.JSZip)return toast('No se cargó el lector ZIP. Revisa tu conexión y vuelve a abrir la aplicación.');
+ const info=$('zipInfo');info.textContent='Abriendo el ZIP original…';
+ let zip;
+ try{zip=await window.JSZip.loadAsync(file,{checkCRC32:false})}
+ catch(err){console.warn(err);info.textContent='ZIP no válido o incompatible.';return toast('No pude abrir ese ZIP. Comprueba que no esté protegido con contraseña.')}
+ const entries=Object.values(zip.files).filter(e=>!e.dir&&!/(^|\/)(__MACOSX|\.DS_Store|Thumbs\.db)(\/|$)/i.test(e.name)&&/\.(jpe?g|png|webp)$/i.test(e.name));
+ if(!entries.length){info.textContent='No encontré imágenes JPG, PNG o WEBP dentro del ZIP.';return toast('ZIP sin imágenes JPG/PNG/WEBP.')}
+ if(entries.length>100){info.textContent='El ZIP contiene más de 100 imágenes. Usa varios lotes.';return toast('Máximo 100 imágenes por ZIP.')}
+ const duplicateNames=new Set(),seen=new Set(),prepared=[];
+ const sizes=entries.map(e=>e._data?.uncompressedSize||0),totalEstimated=sizes.reduce((a,b)=>a+b,0);
+ if(totalEstimated>190*1024*1024){info.textContent='El ZIP descomprimido supera 190 MB.';return toast('Ese ZIP es demasiado grande para un iPhone. Divide el lote.')}
+ for(const e of entries){
+  const name=e.name.replace(/\\/g,'/').split('/').pop();
+  if(seen.has(name.toLowerCase()))duplicateNames.add(name);
+  seen.add(name.toLowerCase());
+ }
+ if(duplicateNames.size){info.textContent='Hay nombres de imagen duplicados en distintas carpetas del ZIP.';return toast('ZIP con nombres duplicados: organiza una sola carpeta con nombres únicos.')}
+ entries.sort((a,b)=>{
+  const na=a.name.split('/').pop(),nb=b.name.split('/').pop(),ta=photoTimestamp(na),tb=photoTimestamp(nb);
+  if(Number.isFinite(ta)&&Number.isFinite(tb))return ta-tb||na.localeCompare(nb,undefined,{numeric:true});
+  if(Number.isFinite(ta))return -1;if(Number.isFinite(tb))return 1;
+  return na.localeCompare(nb,undefined,{numeric:true});
+ });
+ info.textContent='Descomprimiendo '+entries.length+' imágenes…';
+ try{
+  for(let i=0;i<entries.length;i++){
+   const entry=entries[i],name=entry.name.split('/').pop();
+   const blob=await entry.async('blob');
+   if(blob.size>22*1024*1024)throw Error(name+' supera 22 MB.');
+   const contentType=/\.png$/i.test(name)?'image/png':/\.webp$/i.test(name)?'image/webp':'image/jpeg';
+   prepared.push(new File([blob],name,{type:contentType,lastModified:Date.now()}));
+   if(i%5===0)info.textContent='Importando ZIP: '+(i+1)+' de '+entries.length+' imágenes…';
+  }
+  const allStamped=prepared.every(x=>Number.isFinite(photoTimestamp(x.name)));
+  // Preserve filenames and files for the FFmpeg renderer. Do not pass through Photos.
+  await addFiles(prepared,{sortByTime:true,autoSync:false});
+  state.lastSyncMethod='none';
+  if(allStamped){
+    state.syncMode='names';$('syncMode').value='names';
+    info.textContent='✓ '+prepared.length+' imágenes con nombre y tiempo originales. '+(audioDuration()?'Sincronizando con la narración…':'Carga la narración para aplicar estos tiempos.');
+    if(audioDuration())syncFromPhotoNames(true);
+  }else{
+    state.syncMode='voice';$('syncMode').value='voice';
+    info.textContent='Importé '+prepared.length+' fotos, pero algunos nombres no contienen tiempos. Usa “Iniciar sincronización paso a paso” o detección de pausas.';
+  }
+ }catch(err){console.error('ZIP import',err);info.textContent='Error al importar ZIP: '+err.message;toast('Error al importar: '+err.message)}
+}
+
 function renderScenes(){ui.scenes.replaceChildren();if(!state.scenes.length){const e=document.createElement('div');e.className='timeline-empty';e.textContent='Tus imágenes aparecerán aquí. Podrás reordenarlas y cambiar su duración.';ui.scenes.append(e);return}
  state.scenes.forEach((s,i)=>{
   const c=document.createElement('article');c.className='scene-card'+(state.active===i?' selected':'');
@@ -720,7 +791,10 @@ async function demo(){if(state.exporting)return;const demoFiles=await Promise.al
  drawDemoImage('ESCENA 02',['#dc5b8c','#6f43d0'],'square'),
  drawDemoImage('ESCENA 03',['#087879','#283991'],'circle')]);await addFiles(demoFiles)}
 function bind(){state.fit='blur';state.imageRatio='auto';state.syncMode='voice';$('fitMode').value='blur';$('imageRatio').value='auto';$('syncMode').value='voice';previewDimensions();drawPreviewAt(0);sync();
- $('photosInput').addEventListener('change',async e=>{await addFiles(e.target.files);e.target.value='' });$('addMore').onclick=()=>$('photosInput').click();$('demoBtn').onclick=demo;$('quickAdd').onclick=()=>$('photosInput').click();$('quickDemo').onclick=demo;$('quickAudio').onclick=()=>$('audioInput').click();$('quickSync').onclick=syncUsingAudioMode;
+ $('photosInput').addEventListener('change',async e=>{await addFiles(e.target.files);e.target.value='' });
+ $('zipInput').addEventListener('change',async e=>{const zip=e.target.files?.[0];e.target.value='';if(zip)await importZip(zip)});
+ $('quickZip').onclick=()=>$('zipInput').click();
+ $('zipSide').onclick=()=>$('zipInput').click();$('addMore').onclick=()=>$('photosInput').click();$('demoBtn').onclick=demo;$('quickAdd').onclick=()=>$('photosInput').click();$('quickDemo').onclick=demo;$('quickAudio').onclick=()=>$('audioInput').click();$('quickSync').onclick=syncUsingAudioMode;
  $('startGuidedSync').onclick=startGuidedSync;
  $('markAudioCut').onclick=markCutFromAudio;
  $('fitLastAudio').onclick=fitFinalSceneToAudio;
