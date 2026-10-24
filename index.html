@@ -48,20 +48,20 @@
     <div class="section-title"><span>03</span> Narración (opcional)</div>
     <label class="audio-upload" for="audioInput"><span class="audio-symbol">♫</span><span class="audio-copy"><strong id="audioName">Añadir audio</strong><small>MP3, M4A, WAV y compatibles</small></span><span class="audio-add">+</span></label><input id="audioInput" type="file" accept="audio/*,.m4a" hidden><div class="audio-buttons" id="audioButtons" hidden><button id="removeAudio" class="text-button">Quitar narración</button><button id="matchAudio" class="text-button">Sincronizar imágenes con el audio</button></div><audio id="audioElement" preload="metadata"></audio>
   </aside>
-  <main class="workspace"><div class="workspace-header"><div><div class="eyebrow">VISTA PREVIA</div><h2>Tu estudio creativo <span class="badge">V6.0 · FFmpeg</span></h2></div><div class="workspace-tools"><span id="imageCount">0 imágenes</span><span id="totalTime">00:00</span></div></div>
+  <main class="workspace"><div class="workspace-header"><div><div class="eyebrow">VISTA PREVIA</div><h2>Tu estudio creativo <span class="badge">V6.1 · Audio real</span></h2></div><div class="workspace-tools"><span id="imageCount">0 imágenes</span><span id="totalTime">00:00</span></div></div>
     <div class="mobile-quick"><button class="button primary" id="quickAdd">＋ Agregar fotos</button><button class="button subtle" id="quickDemo">✦ Prueba rápida</button></div>
     <section class="sync-quick" aria-label="Sincronización de imágenes y audio">
       <div class="sync-quick-head"><strong>♫ Sincronización de audio</strong><span id="syncStatus" role="status" aria-live="polite">Sin narración</span></div>
-      <div class="sync-quick-actions"><button type="button" class="button subtle" id="quickAudio">＋ Cargar audio</button><button type="button" class="button primary" id="quickSync">♫ Sincronizar con audio</button></div>
+      <div class="sync-quick-actions"><button type="button" class="button subtle" id="quickAudio">＋ Cargar audio</button><button type="button" class="button primary" id="quickSync">♫ Detectar cortes en audio</button></div>
       <p class="sync-explain" id="syncExplain">Agrega fotos y tu narración. Las imágenes se ajustarán a la duración del audio.</p>
     </section>
     <section class="timing-editor" aria-label="Sincronización exacta">
  <div class="timing-head"><strong>🎵 Sincronización con la pista de audio</strong><span id="timingStatus">Sin aplicar</span></div>
  <label for="syncMode">Modo de sincronización</label>
- <select id="syncMode"><option value="names">Desde nombres de imágenes (como 6.1)</option><option value="exact">Tiempos manuales (opcional)</option><option value="equal">Repartir audio (simple)</option></select>
+ <select id="syncMode"><option value="voice">Detectar pausas de la voz (recomendado)</option><option value="names">Desde nombres 0-00.jpg</option><option value="exact">Tiempos manuales (opcional)</option><option value="equal">Repartir el audio por igual (simple)</option></select>
  <label for="timecodes">Tiempos manuales (opcionales). No necesitas pegar el guion.</label>
  <textarea id="timecodes" rows="5" spellcheck="false" placeholder="(0:00) Primera escena...&#10;(0:04) Segunda escena...&#10;(0:09) Tercera escena..."></textarea>
- <div class="timing-actions"><button id="applyTimes" class="button primary" type="button">♫ Sincronizar con audio (6.1)</button><button id="clearTimes" class="button subtle" type="button">Limpiar</button></div>
+ <div class="timing-actions"><button id="applyTimes" class="button primary" type="button">♫ Detectar cortes en audio</button><button id="clearTimes" class="button subtle" type="button">Limpiar</button></div>
  <p class="timing-hint" id="timingHint">Modo 6.1: imágenes nombradas 0-00.jpg, 0-04.jpg, 0-09.jpg. Los cortes siguen esos tiempos y la última imagen termina con el audio. Si tus nombres no contienen tiempos, ajusta los cortes escuchando la pista.</p>
 </section><section class="audio-timeline-panel" aria-label="Cortes guiados por el audio">
  <div><strong>♫ Cortes escuchando la narración</strong><span id="audioPosition">00:00.00</span></div>
@@ -97,9 +97,9 @@ const ui = {
   download:$('downloadArea'),downloadLink:$('downloadLink'),downloadHint:$('downloadHint'),
   audio:$('audioElement'),audioName:$('audioName'),audioButtons:$('audioButtons'),toast:$('toast'),syncStatus:$('syncStatus'),syncExplain:$('syncExplain'),audioPosition:$('audioPosition')
 };
-const state = {scenes:[],ratio:'9:16',imageRatio:'auto',fit:'blur',syncMode:'names',transitionType:'fade',transitionDuration:.45,motion:'slide',motionIntensity:80,duration:4,quality:720,active:0,
+const state = {scenes:[],ratio:'9:16',imageRatio:'auto',fit:'blur',syncMode:'voice',transitionType:'fade',transitionDuration:.45,motion:'slide',motionIntensity:80,duration:4,quality:720,active:0,
    playStarted:0,pausedAt:0,previewing:false,playingFrame:0,exporting:false,cancel:false,activeRecorder:null,
-   audioUrl:null,audioFile:null,audioCtx:null,audioSource:null,audioDestination:null,wakeLock:null,lastDownloadUrl:null,audioSync:true};
+   audioUrl:null,audioFile:null,voiceSyncInProgress:false,lastSyncMethod:'none',lastSyncCuts:0,audioCtx:null,audioSource:null,audioDestination:null,wakeLock:null,lastDownloadUrl:null,audioSync:true};
 const ratioNums={'9:16':[9,16],'16:9':[16,9],'1:1':[1,1],'4:5':[4,5]};
 let ctx=ui.canvas.getContext('2d',{alpha:false,willReadFrequently:false});
 let toastTimer=null;
@@ -250,8 +250,13 @@ function updateSyncUI(){
  if(!duration){ui.syncStatus.textContent='Leyendo audio…';ui.syncExplain.textContent='Cargando la duración de la narración.';return}
  if(!count){ui.syncStatus.textContent=secFmt(duration)+' de audio';ui.syncExplain.textContent='Ahora agrega las imágenes para sincronizarlas con este audio.';return}
  const diff=Math.abs(totalDuration()-duration);
- if(diff<0.08){ui.syncStatus.textContent='✓ Sincronizado';ui.syncExplain.textContent=count+' imágenes ajustadas a '+secFmt(duration)+' de narración. También puedes pulsar Sincronizar imágenes.';}
- else{ui.syncStatus.textContent='Por sincronizar';ui.syncExplain.textContent='La narración dura '+secFmt(duration)+'. Pulsa Sincronizar imágenes para ajustar las '+count+' escenas.';}
+ if(diff<.08){
+  ui.syncStatus.textContent=state.lastSyncMethod==='voice'?'✓ Cortes por pausas':state.lastSyncMethod==='names'?'✓ Tiempos de nombres':state.lastSyncMethod==='manual'?'✓ Cortes manuales':'✓ Duración ajustada';
+  ui.syncExplain.textContent=state.lastSyncMethod==='voice'?'Detectadas '+state.lastSyncCuts+' pausas útiles para '+count+' imágenes. Revisa la previsualización para decidir si las imágenes coinciden con lo narrado.':'El video y el audio duran '+preciseSec(duration)+'. La coincidencia de duración no asegura la coincidencia del contenido.';
+ }else{
+  ui.syncStatus.textContent='Desajustado';
+  ui.syncExplain.textContent='Imágenes: '+preciseSec(totalDuration())+' · Audio: '+preciseSec(duration)+'. Pulsa Detectar cortes en audio.';
+ }
 }
 function autoSyncScenesToAudio(showToast=false){if(state.syncMode==='equal'&&audioDuration()&&state.scenes.length)return syncScenesToAudio(showToast);updateSyncUI();return false}
 function sync(){const n=state.scenes.length;ui.count.textContent=`${n} ${n===1?'imagen':'imágenes'}`;ui.scenesNumber.textContent=`(${n})`;ui.total.textContent=secFmt(totalDuration());ui.end.textContent=secFmt(totalDuration());ui.empty.hidden=n>0;ui.seek.disabled=n===0;ui.play.disabled=n===0;renderScenes();drawPreviewAt(state.pausedAt);updateSyncUI()}
