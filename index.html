@@ -58,9 +58,9 @@
       <p class="sync-explain" id="syncExplain">Agrega fotos y tu narración. Las imágenes se ajustarán a la duración del audio.</p>
     </section>
     <section class="timing-editor" aria-label="Sincronización exacta">
- <div class="timing-head"><strong>🎵 Sincronización con la pista de audio</strong><span id="timingStatus">Sin aplicar</span></div>
+ <div class="timing-head"><strong>🎵 Sincronización con audio · cortes exactos paso a paso</strong><span id="timingStatus">Sin aplicar</span></div>
  <label for="syncMode">Modo de sincronización</label>
- <select id="syncMode"><option value="voice">Detectar pausas de la voz (recomendado)</option><option value="names">Desde nombres 0-00.jpg</option><option value="exact">Tiempos manuales (opcional)</option><option value="equal">Repartir el audio por igual (simple)</option><option value="manual">Cortes marcados escuchando la voz</option></select>
+ <select id="syncMode"><option value="voice">Detectar pausas automáticamente (aproximado)</option><option value="names">Desde nombres 0-00.jpg</option><option value="exact">Tiempos manuales (opcional)</option><option value="equal">Repartir el audio por igual (simple)</option><option value="manual">Cortes marcados escuchando la voz</option></select>
  <label for="timecodes">Tiempos manuales (opcionales). No necesitas pegar el guion.</label>
  <textarea id="timecodes" rows="5" spellcheck="false" placeholder="(0:00) Primera escena...&#10;(0:04) Segunda escena...&#10;(0:09) Tercera escena..."></textarea>
  <div class="timing-actions"><button id="applyTimes" class="button primary" type="button">♫ Detectar cortes en audio</button><button id="clearTimes" class="button subtle" type="button">Limpiar</button></div>
