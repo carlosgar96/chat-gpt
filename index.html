@@ -48,7 +48,7 @@
     <div class="section-title"><span>03</span> Narración (opcional)</div>
     <label class="audio-upload" for="audioInput"><span class="audio-symbol">♫</span><span class="audio-copy"><strong id="audioName">Añadir audio</strong><small>MP3, M4A, WAV y compatibles</small></span><span class="audio-add">+</span></label><input id="audioInput" type="file" accept="audio/*,.m4a" hidden><div class="audio-buttons" id="audioButtons" hidden><button id="removeAudio" class="text-button">Quitar narración</button><button id="matchAudio" class="text-button">Sincronizar imágenes con el audio</button></div><audio id="audioElement" preload="metadata"></audio>
   </aside>
-  <main class="workspace"><div class="workspace-header"><div><div class="eyebrow">VISTA PREVIA</div><h2>Tu estudio creativo <span class="badge">V5.0 · Motor 6.1</span></h2></div><div class="workspace-tools"><span id="imageCount">0 imágenes</span><span id="totalTime">00:00</span></div></div>
+  <main class="workspace"><div class="workspace-header"><div><div class="eyebrow">VISTA PREVIA</div><h2>Tu estudio creativo <span class="badge">V6.0 · FFmpeg</span></h2></div><div class="workspace-tools"><span id="imageCount">0 imágenes</span><span id="totalTime">00:00</span></div></div>
     <div class="mobile-quick"><button class="button primary" id="quickAdd">＋ Agregar fotos</button><button class="button subtle" id="quickDemo">✦ Prueba rápida</button></div>
     <section class="sync-quick" aria-label="Sincronización de imágenes y audio">
       <div class="sync-quick-head"><strong>♫ Sincronización de audio</strong><span id="syncStatus" role="status" aria-live="polite">Sin narración</span></div>
@@ -99,7 +99,7 @@ const ui = {
 };
 const state = {scenes:[],ratio:'9:16',imageRatio:'auto',fit:'blur',syncMode:'names',transitionType:'fade',transitionDuration:.45,motion:'slide',motionIntensity:80,duration:4,quality:720,active:0,
    playStarted:0,pausedAt:0,previewing:false,playingFrame:0,exporting:false,cancel:false,activeRecorder:null,
-   audioUrl:null,audioCtx:null,audioSource:null,audioDestination:null,wakeLock:null,lastDownloadUrl:null,audioSync:true};
+   audioUrl:null,audioFile:null,audioCtx:null,audioSource:null,audioDestination:null,wakeLock:null,lastDownloadUrl:null,audioSync:true};
 const ratioNums={'9:16':[9,16],'16:9':[16,9],'1:1':[1,1],'4:5':[4,5]};
 let ctx=ui.canvas.getContext('2d',{alpha:false,willReadFrequently:false});
 let toastTimer=null;
@@ -223,7 +223,7 @@ function objectURL(file){return URL.createObjectURL(file)}
 async function loadImage(file){const url=objectURL(file);try{
  const img=new Image();img.decoding='async';img.src=url;
  if(img.decode){await img.decode()}else{await new Promise((res,rej)=>{img.onload=res;img.onerror=rej})}
- return {url,img,name:file.name||'imagen',duration:state.duration,blurred:null};
+ return {url,img,originalFile:file,name:file.name||'imagen',duration:state.duration,blurred:null};
  }catch(e){URL.revokeObjectURL(url);throw e}}
 function audioDuration(){const d=ui.audio.duration;return Number.isFinite(d)&&d>0?d:0}
 function syncScenesToAudio(showToast=true){if(state.syncMode!=='equal'){if(showToast)toast('Para repartir por igual, elige sincronización simple.');return false}
@@ -508,10 +508,10 @@ function bind(){previewDimensions();drawPreviewAt(0);sync();
  $('duration').oninput=e=>{state.duration=Number(e.target.value);$('durationValue').textContent=state.duration.toFixed(1)+' s';for(const s of state.scenes)s.duration=state.duration;state.syncMode='manual';stopPreview();state.pausedAt=0;sync()};
  $('quality').onchange=e=>{state.quality=Number(e.target.value)};
  ui.play.onclick=playPreview;ui.seek.oninput=e=>{stopPreview();state.pausedAt=totalDuration()*Number(e.target.value)/100;if(state.audioUrl){try{ui.audio.currentTime=state.pausedAt}catch{}}drawPreviewAt(state.pausedAt)};ui.audio.addEventListener('seeked',()=>{if(!state.previewing&&!state.exporting&&state.audioUrl){state.pausedAt=clamp(ui.audio.currentTime,0,totalDuration());drawPreviewAt(state.pausedAt)}});
- $('audioInput').onchange=e=>{const file=e.target.files?.[0];if(!file)return;stopPreview();if(state.audioUrl)URL.revokeObjectURL(state.audioUrl);state.audioUrl=objectURL(file);ui.audio.onloadedmetadata=()=>{if(state.scenes.length&&state.syncMode==='equal'){syncScenesToAudio(false);toast('Modo simple: imágenes distribuidas por igual.')}else toast('Audio cargado: usa Sincronizar 6.1 o marca cortes escuchando la voz.');updateSyncUI();updateAudioPosition()};ui.audio.src=state.audioUrl;ui.audio.load();ui.audioName.textContent=file.name;ui.audioButtons.hidden=false;e.target.value='';updateSyncUI();toast('Audio añadido. La sincronización se hará automáticamente.');};
- $('removeAudio').onclick=()=>{stopPreview();if(state.audioUrl)URL.revokeObjectURL(state.audioUrl);state.audioUrl=null;ui.audio.removeAttribute('src');ui.audio.load();ui.audioName.textContent='Añadir audio';ui.audioButtons.hidden=true;updateSyncUI()};
+ $('audioInput').onchange=e=>{const file=e.target.files?.[0];if(!file)return;stopPreview();if(state.audioUrl)URL.revokeObjectURL(state.audioUrl);state.audioFile=file;state.audioUrl=objectURL(file);ui.audio.onloadedmetadata=()=>{if(state.scenes.length&&state.syncMode==='equal'){syncScenesToAudio(false);toast('Modo simple: imágenes distribuidas por igual.')}else toast('Audio cargado: usa Sincronizar 6.1 o marca cortes escuchando la voz.');updateSyncUI();updateAudioPosition()};ui.audio.src=state.audioUrl;ui.audio.load();ui.audioName.textContent=file.name;ui.audioButtons.hidden=false;e.target.value='';updateSyncUI();toast('Audio añadido. La sincronización se hará automáticamente.');};
+ $('removeAudio').onclick=()=>{stopPreview();if(state.audioUrl)URL.revokeObjectURL(state.audioUrl);state.audioUrl=null;state.audioFile=null;ui.audio.removeAttribute('src');ui.audio.load();ui.audioName.textContent='Añadir audio';ui.audioButtons.hidden=true;updateSyncUI()};
  $('matchAudio').onclick=()=>{stopPreview();syncScenesToAudio(true)};
- $('exportAll').onclick=()=>exportVideo('all');$('exportClips').onclick=()=>exportVideo('clips');$('cancelExport').onclick=()=>{state.cancel=true;ui.progressDetail.textContent='Cancelando…'};
+ $('exportAll').onclick=()=>exportOnServer('full');$('exportClips').onclick=()=>exportOnServer('clips');$('cancelExport').onclick=()=>{state.cancel=true;ui.progressDetail.textContent='Cancelando…'};
  $('helpBtn').onclick=()=>$('helpDialog').showModal();$('closeHelp').onclick=()=>$('helpDialog').close();$('understood').onclick=()=>$('helpDialog').close();
  window.addEventListener('visibilitychange',()=>{if(document.hidden){if(state.previewing){state.pausedAt=0;stopPreview()}if(state.exporting)state.cancel=true}});
  window.addEventListener('beforeunload',()=>{if(state.exporting)state.cancel=true});
