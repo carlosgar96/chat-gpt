@@ -21,7 +21,7 @@ function filter(w,h,d,i,fit){
  if(fit==='cover'){
   return '[0:v]scale='+even(w*1.08)+':'+even(h*1.08)+':force_original_aspect_ratio=increase,crop='+w+':'+h+':x=(iw-ow)*('+x+'):y=(ih-oh)/2,fps=30,format=yuv420p[v]';
  }
- const background=fit==='contain'?'gblur=sigma=0':'boxblur=12:1';
+ const background=fit==='contain'?'boxblur=1:1':'boxblur=12:1';
  return '[0:v]split=2[bi][fi];[bi]scale='+w+':'+h+':force_original_aspect_ratio=increase,crop='+w+':'+h+','+background+'[bg];[fi]scale='+(w-20)+':'+(h-20)+':force_original_aspect_ratio=decrease[fg];[bg][fg]overlay=x='+"'"+'(W-w)*('+x+')'+"'"+':y='+"'"+'(H-h)/2'+"'"+':eval=frame:shortest=1,fps=30,format=yuv420p[v]';
 }
 async function visual(job,scene,i,d,out,w,h,fit){await runFFmpeg(['-loop','1','-framerate','30','-t',fmt(d),'-i',scene.path,'-filter_complex',filter(w,h,scene.duration,i,fit),'-map','[v]','-an','-t',fmt(d),'-c:v','libx264','-preset','veryfast','-crf','23','-r','30','-pix_fmt','yuv420p','-movflags','+faststart',out],job)}
