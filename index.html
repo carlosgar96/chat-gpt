@@ -352,13 +352,13 @@ function renderScenes(){ui.scenes.replaceChildren();if(!state.scenes.length){con
   const ctrls=document.createElement('div');ctrls.className='scene-ctrls';
   const up=miniButton('↑',`Mover escena ${i+1} atrás`,()=>moveScene(i,-1));const down=miniButton('↓',`Mover escena ${i+1} adelante`,()=>moveScene(i,1));up.disabled=i===0;down.disabled=i===state.scenes.length-1;
   const duration=document.createElement('input');duration.type='number';duration.className='scene-duration';duration.value=s.duration;duration.min='.06';duration.max='999';duration.step='.01';duration.setAttribute('aria-label',`Duración en segundos de escena ${i+1}`);
-  duration.onchange=()=>{const next=Number(duration.value);s.duration=Number.isFinite(next)?clamp(next,.06,999):state.duration;duration.value=s.duration;state.syncMode='manual';stopPreview();state.pausedAt=0;sync()};
+  duration.onchange=()=>{const next=Number(duration.value);s.duration=Number.isFinite(next)?clamp(next,.06,999):state.duration;duration.value=s.duration;state.syncMode='manual';state.lastSyncMethod='manual';stopPreview();state.pausedAt=0;sync()};
   const remove=miniButton('×',`Eliminar escena ${i+1}`,()=>removeScene(i));remove.className='delete';ctrls.append(up,down,duration,remove);
   const start=state.scenes.slice(0,i).reduce((a,b)=>a+b.duration,0);
   const times=document.createElement('div');times.className='scene-times';
   const lbl=document.createElement('small');lbl.textContent='Inicio '+detailedTime(start);
   const end=document.createElement('input');end.type='text';end.value=detailedTime(start+s.duration);end.title='Fin mm:ss.ss';end.setAttribute('aria-label','Fin exacto de la imagen '+(i+1));
-  end.onchange=()=>{const sec=timeSeconds(end.value);if(!Number.isFinite(sec)||sec<=start+.05){toast('El fin debe ser posterior a '+detailedTime(start));end.value=detailedTime(start+s.duration);return}state.syncMode='manual';stopPreview();s.duration=Math.round((sec-start)*1000)/1000;state.pausedAt=0;sync()};
+  end.onchange=()=>{const sec=timeSeconds(end.value);if(!Number.isFinite(sec)||sec<=start+.05){toast('El fin debe ser posterior a '+detailedTime(start));end.value=detailedTime(start+s.duration);return}state.syncMode='manual';state.lastSyncMethod='manual';stopPreview();s.duration=Math.round((sec-start)*1000)/1000;state.pausedAt=0;sync()};
   times.append(lbl,end);c.append(preview,name,ctrls,times);ui.scenes.append(c)
  })}
 function miniButton(text,label,fn){const b=document.createElement('button');b.type='button';b.textContent=text;b.title=label;b.setAttribute('aria-label',label);b.onclick=fn;return b}
@@ -435,7 +435,15 @@ function drawTimelineAt(t,scenes=state.scenes,withTransitions=true){
  baseCtx.save();baseCtx.globalAlpha=mix;baseCtx.drawImage(buffer,0,0);baseCtx.restore();
 }
 function drawPreviewAt(time){updateAudioPosition();const all=totalDuration();if(!state.scenes.length){ctx.fillStyle='#15172a';ctx.fillRect(0,0,ui.canvas.width,ui.canvas.height);ui.current.textContent='00:00';ui.seek.value='0';return}
- const t=clamp(time,0,Math.max(0,all-.001));drawTimelineAt(t,state.scenes,true);ui.current.textContent=secFmt(t);ui.seek.value=all?String(Math.round(t/all*10000)/100):'0';}
+ const t=clamp(time,0,Math.max(0,all-.001));drawTimelineAt(t,state.scenes,true);
+ if(state.previewing){
+  const frame=frameAt(t,state.scenes);
+  if(frame&&frame.index!==state.active){
+   state.active=frame.index;
+   Array.from(ui.scenes.children).forEach((el,i)=>el.classList.toggle('selected',i===state.active));
+  }
+ }
+ ui.current.textContent=secFmt(t);ui.seek.value=all?String(Math.round(t/all*10000)/100):'0';}
 function stopPreview(){
  const wasPlaying=state.previewing;
  if(wasPlaying&&state.audioUrl&&Number.isFinite(ui.audio.currentTime))state.pausedAt=Math.min(totalDuration(),ui.audio.currentTime);
@@ -653,7 +661,7 @@ function bind(){previewDimensions();drawPreviewAt(0);sync();
  $('clearTimes').onclick=()=>{$('timecodes').value='';$('timingStatus').textContent='Sin aplicar';$('timingHint').textContent='Pega una marca por imagen. No se modificaron las duraciones actuales.'};
  $('transitionType').onchange=e=>{state.transitionType=e.target.value};
  $('transitionDuration').onchange=e=>{state.transitionDuration=Number(e.target.value)};
- $('duration').oninput=e=>{state.duration=Number(e.target.value);$('durationValue').textContent=state.duration.toFixed(1)+' s';for(const s of state.scenes)s.duration=state.duration;state.syncMode='manual';stopPreview();state.pausedAt=0;sync()};
+ $('duration').oninput=e=>{state.duration=Number(e.target.value);$('durationValue').textContent=state.duration.toFixed(1)+' s';for(const s of state.scenes)s.duration=state.duration;state.syncMode='manual';state.lastSyncMethod='manual';stopPreview();state.pausedAt=0;sync()};
  $('quality').onchange=e=>{state.quality=Number(e.target.value)};
  ui.play.onclick=playPreview;ui.seek.oninput=e=>{stopPreview();state.pausedAt=totalDuration()*Number(e.target.value)/100;if(state.audioUrl){try{ui.audio.currentTime=state.pausedAt}catch{}}drawPreviewAt(state.pausedAt)};ui.audio.addEventListener('seeked',()=>{if(!state.previewing&&!state.exporting&&state.audioUrl){state.pausedAt=clamp(ui.audio.currentTime,0,totalDuration());drawPreviewAt(state.pausedAt)}});
  $('audioInput').onchange=e=>{const file=e.target.files?.[0];if(!file)return;stopPreview();if(state.audioUrl)URL.revokeObjectURL(state.audioUrl);state.audioFile=file;state.audioUrl=objectURL(file);ui.audio.onloadedmetadata=()=>{updateSyncUI();updateAudioPosition();if(state.scenes.length){
