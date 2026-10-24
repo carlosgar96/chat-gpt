@@ -60,7 +60,7 @@
     <section class="timing-editor" aria-label="Sincronización exacta">
  <div class="timing-head"><strong>🎵 Sincronización con la pista de audio</strong><span id="timingStatus">Sin aplicar</span></div>
  <label for="syncMode">Modo de sincronización</label>
- <select id="syncMode"><option value="voice">Detectar pausas de la voz (recomendado)</option><option value="names">Desde nombres 0-00.jpg</option><option value="exact">Tiempos manuales (opcional)</option><option value="equal">Repartir el audio por igual (simple)</option></select>
+ <select id="syncMode"><option value="voice">Detectar pausas de la voz (recomendado)</option><option value="names">Desde nombres 0-00.jpg</option><option value="exact">Tiempos manuales (opcional)</option><option value="equal">Repartir el audio por igual (simple)</option><option value="manual">Cortes marcados escuchando la voz</option></select>
  <label for="timecodes">Tiempos manuales (opcionales). No necesitas pegar el guion.</label>
  <textarea id="timecodes" rows="5" spellcheck="false" placeholder="(0:00) Primera escena...&#10;(0:04) Segunda escena...&#10;(0:09) Tercera escena..."></textarea>
  <div class="timing-actions"><button id="applyTimes" class="button primary" type="button">♫ Detectar cortes en audio</button><button id="clearTimes" class="button subtle" type="button">Limpiar</button></div>
@@ -257,6 +257,7 @@ async function syncUsingAudioMode(){
  if(state.syncMode==='equal')return syncScenesToAudio(true);
  if(state.syncMode==='exact')return applyExactTimes();
  if(state.syncMode==='names')return syncFromPhotoNames(true);
+ if(state.syncMode==='manual'){toast('Los cortes manuales se conservan. Para volver a marcarlos pulsa Iniciar sincronización paso a paso.');return true}
  return await syncByVoicePauses(true);
 }
 
@@ -313,7 +314,7 @@ function markGuidedCut(){
   stopPreview();state.guidedSync=false;
   state.scenes.forEach((sc,i)=>{sc.duration=durations[i]});
   state.lastSyncMethod='manual';state.lastSyncCuts=durations.length-1;
-  state.syncMode='manual';state.pausedAt=0;state.active=0;
+  state.syncMode='manual';$('syncMode').value='manual';state.pausedAt=0;state.active=0;
   sync();guidedStatus();
   $('timingStatus').textContent='✓ '+(durations.length-1)+' cortes con audio';
   $('timingHint').textContent='Se marcaron los '+(durations.length-1)+' cambios directamente sobre la reproducción del audio. El último clip finaliza en '+preciseSec(end)+'.';
@@ -729,7 +730,7 @@ function bind(){state.fit='blur';state.imageRatio='auto';state.syncMode='voice';
  document.querySelectorAll('[data-ratio]').forEach(b=>b.onclick=()=>{if(state.exporting)return;stopPreview();state.ratio=b.dataset.ratio;document.querySelectorAll('[data-ratio]').forEach(el=>el.classList.toggle('active',el===b));previewDimensions();drawPreviewAt(state.pausedAt)});
  $('imageRatio').onchange=e=>{state.imageRatio=e.target.value;drawPreviewAt(state.pausedAt)};$('fitMode').onchange=e=>{state.fit=e.target.value;drawPreviewAt(state.pausedAt)};$('motion').onchange=e=>{state.motion=e.target.value;drawPreviewAt(state.pausedAt)};
  $('motionIntensity').oninput=e=>{state.motionIntensity=Number(e.target.value);$('motionAmount').textContent=state.motionIntensity+'% · '+(state.motionIntensity>=70?'Intenso':state.motionIntensity>=45?'Medio':'Suave');state.pausedAt=0;drawPreviewAt(0)};
- $('syncMode').onchange=e=>{state.syncMode=e.target.value;const equal=state.syncMode==='equal',exact=state.syncMode==='exact',names=state.syncMode==='names';$('applyTimes').textContent=equal?'⟳ Repartir por igual':exact?'✓ Aplicar marcas manuales':names?'♫ Sincronizar por nombres':'♫ Detectar pausas del audio';$('quickSync').textContent=equal?'⟳ Repartir audio':exact?'⟳ Aplicar marcas':names?'♫ Usar nombres':'♫ Detectar cortes en audio';$('timingStatus').textContent=equal?'Modo simple':exact?'Marcas manuales':names?'Desde nombres':'Análisis de voz'};
+ $('syncMode').onchange=e=>{state.syncMode=e.target.value;const equal=state.syncMode==='equal',exact=state.syncMode==='exact',names=state.syncMode==='names',manual=state.syncMode==='manual';$('applyTimes').textContent=equal?'⟳ Repartir por igual':exact?'✓ Aplicar marcas manuales':names?'♫ Sincronizar por nombres':manual?'✓ Cortes manuales aplicados':'♫ Detectar pausas del audio';$('quickSync').textContent=equal?'⟳ Repartir audio':exact?'⟳ Aplicar marcas':names?'♫ Usar nombres':manual?'✓ Cortes manuales':'♫ Detectar cortes en audio';$('timingStatus').textContent=equal?'Modo simple':exact?'Marcas manuales':names?'Desde nombres':manual?'Cortes escuchando voz':'Análisis de voz'};
  $('applyTimes').onclick=syncUsingAudioMode;
  $('clearTimes').onclick=()=>{$('timecodes').value='';$('timingStatus').textContent='Sin aplicar';$('timingHint').textContent='Pega una marca por imagen. No se modificaron las duraciones actuales.'};
  $('transitionType').onchange=e=>{state.transitionType=e.target.value};
