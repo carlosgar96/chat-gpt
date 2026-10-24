@@ -300,7 +300,7 @@ function fitFinalSceneToAudio(){
  state.scenes[state.scenes.length-1].duration=Math.round((end-start)*1000)/1000;state.lastSyncMethod='manual';
  sync();toast('Última imagen ajustada al audio: '+preciseSec(end)+'.')
 }
-function showPhotoComplete(){state.fit='blur';state.imageRatio='auto';$('fitMode').value='blur';$('imageRatio').value='auto';drawPreviewAt(state.pausedAt);toast('Imagen completa, sin recorte ni zoom agresivo.')}
+function showPhotoComplete(){state.fit='blur';state.imageRatio='auto';$('fitMode').value='blur';$('imageRatio').value='auto';drawPreviewAt(state.pausedAt);toast('Imagen completa sin recorte: fondo difuminado y desplazamiento lateral.')}
 function totalDuration(){return state.scenes.reduce((s,item)=>s+item.duration,0)}
 function clamp(n,min,max){return Math.max(min,Math.min(max,n))}
 function dimensions(ratio,quality){const [a,b]=ratioNums[ratio];const edge=Number(quality);const w=Math.round(edge*(a>=b?a/b:1)/2)*2;const h=Math.round(edge*(b>=a?b/a:1)/2)*2;return [w,h]}
@@ -396,27 +396,39 @@ function makeBlurred(scene){if(scene.blurred)return scene.blurred;
  const scale=Math.max(buffer.width/img.naturalWidth,buffer.height/img.naturalHeight);
  c.filter='blur(14px)';c.drawImage(img,(buffer.width-img.naturalWidth*scale)/2,(buffer.height-img.naturalHeight*scale)/2,img.naturalWidth*scale,img.naturalHeight*scale);
  scene.blurred=buffer;return buffer}
-function compose(frame){const w=ui.canvas.width,h=ui.canvas.height;ctx.fillStyle='#10101c';ctx.fillRect(0,0,w,h);if(!frame)return;
- const {scene,index,p}=frame;const motionIndex=Number.isInteger(scene.motionIndex)?scene.motionIndex:index;const img=scene.img;if(!img||!img.naturalWidth)return;
- let area={x:0,y:0,w,h};let fit=state.fit;
- if(state.imageRatio!=='auto'){
-   const [a,b]=ratioNums[state.imageRatio];const ratio=a/b; if(w/h>ratio){area.w=h*ratio;area.x=(w-area.w)/2}else{area.h=w/ratio;area.y=(h-area.h)/2}
+function compose(frame){
+ const w=ui.canvas.width,h=ui.canvas.height;
+ ctx.fillStyle='#10101c';ctx.fillRect(0,0,w,h);
+ if(!frame)return;
+ const {scene,index,p}=frame,img=scene.img;
+ if(!img?.naturalWidth||!img?.naturalHeight)return;
+ const motionIndex=Number.isInteger(scene.motionIndex)?scene.motionIndex:index;
+ let area={x:0,y:0,w,h};
+ if(state.imageRatio!=='auto'&&ratioNums[state.imageRatio]){
+   const [a,b]=ratioNums[state.imageRatio],ratio=a/b;
+   if(w/h>ratio){area.w=h*ratio;area.x=(w-area.w)/2}
+   else{area.h=w/ratio;area.y=(h-area.h)/2}
  }
- if(fit==='blur'){const bg=makeBlurred(scene);ctx.save();ctx.globalAlpha=.84;ctx.drawImage(bg,0,0,w,h);ctx.restore()}
- if(fit==='blur'||fit==='contain'){
-  // Keep all photo pixels visible: no cover crop, no animated enlargement.
-  const ir=img.naturalWidth/img.naturalHeight,vr=area.w/area.h;
-  const scale=.955*(ir>vr?area.w/img.naturalWidth:area.h/img.naturalHeight);
-  const iw=img.naturalWidth*scale,ih=img.naturalHeight*scale;
-  const spareX=Math.max(0,area.w-iw);
-  const intensity=clamp(state.motionIntensity,20,100)/100;
-  const travel=state.motion==='still'?0:spareX*(.22+.4*intensity);
-  const startX=area.x+(spareX-travel)/2;
-  const x0=motionIndex%2===0?startX:startX+travel;
-  const moved=x0+(motionIndex%2===0?1:-1)*travel*clamp(p,0,1);
-  const y0=area.y+(area.h-ih)/2;
-  ctx.drawImage(img,moved,y0,iw,ih);
- }else{renderImage(img,area,p,motionIndex,state.motion)}
+ if(state.fit==='blur'){
+  const backdrop=makeBlurred(scene);
+  ctx.save();ctx.globalAlpha=.9;ctx.drawImage(backdrop,0,0,w,h);ctx.restore();
+ }
+ if(state.fit==='cover'){
+  renderImage(img,area,p,motionIndex,state.motion);
+  if(ui.frameModeTip)ui.frameModeTip.textContent='Atención: modo rellenar con recorte. Elige Imagen completa para conservar la fotografía.';
+  return
+ }
+ // Guaranteed uncropped foreground: scale by the smaller dimension, never by cover.
+ // Reserve side margins for sliding. The entire original image remains visible.
+ const fitScale=Math.min(area.w/img.naturalWidth,area.h/img.naturalHeight)*.90;
+ const fw=img.naturalWidth*fitScale,fh=img.naturalHeight*fitScale;
+ const availableX=Math.max(0,area.w-fw);
+ const direction=motionIndex%2===0?1:-1;
+ const factor=state.motion==='still'?.5:(direction===1?clamp(p,0,1):1-clamp(p,0,1));
+ const x=area.x+availableX*factor;
+ const y=area.y+(area.h-fh)/2;
+ ctx.save();ctx.beginPath();ctx.rect(area.x,area.y,area.w,area.h);ctx.clip();ctx.drawImage(img,x,y,fw,fh);ctx.restore();
+ if(ui.frameModeTip)ui.frameModeTip.textContent='Imagen completa '+img.naturalWidth+'×'+img.naturalHeight+' · Sin recorte · '+(state.fit==='blur'?'Fondo difuminado':'Fondo oscuro');
 }
 function drawTimelineAt(t,scenes=state.scenes,withTransitions=true){
  const frame=frameAt(t,scenes);
@@ -652,7 +664,7 @@ async function demo(){if(state.exporting)return;const demoFiles=await Promise.al
  drawDemoImage('ESCENA 01',['#6747da','#2e93d8'],'circle'),
  drawDemoImage('ESCENA 02',['#dc5b8c','#6f43d0'],'square'),
  drawDemoImage('ESCENA 03',['#087879','#283991'],'circle')]);await addFiles(demoFiles)}
-function bind(){previewDimensions();drawPreviewAt(0);sync();
+function bind(){state.fit='blur';state.imageRatio='auto';state.syncMode='voice';$('fitMode').value='blur';$('imageRatio').value='auto';$('syncMode').value='voice';previewDimensions();drawPreviewAt(0);sync();
  $('photosInput').addEventListener('change',async e=>{await addFiles(e.target.files);e.target.value='' });$('addMore').onclick=()=>$('photosInput').click();$('demoBtn').onclick=demo;$('quickAdd').onclick=()=>$('photosInput').click();$('quickDemo').onclick=demo;$('quickAudio').onclick=()=>$('audioInput').click();$('quickSync').onclick=syncUsingAudioMode;
  $('markAudioCut').onclick=markCutFromAudio;
  $('fitLastAudio').onclick=fitFinalSceneToAudio;
